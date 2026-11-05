@@ -4957,6 +4957,9 @@ function runCombo(name, B) {
   if (name === 'drop') {                                         // phách cuối: im + tối om → đúng phách drop: nổ trầm, nhạc vào, nháy 2 phách
     djCut(true); djFlash('black', B * 1000 + 80);
     at(1, () => { djCut(false); sfx('boom', vol); djFlash('strobe', B * 2000); djFx.pumpUntil = performance.now() + 2200; });
+  } else if (name === 'blackdrop') {                             // như combo drop nhưng chỉ đèn: tối om 1 phách → nổ trầm + nháy (nhạc không bị tắt)
+    djFlash('black', B * 1000 + 80);
+    at(1, () => { sfx('boom', vol); djFlash('strobe', B * 2000); djFx.pumpUntil = performance.now() + 2200; });
   } else if (name === 'chop') {                                  // chặt nhịp: 2 phách móc đơn, im+tối / tiếng+flash xen kẽ
     for (let i = 0; i < 4; i++) at(i * 0.5, () => { const mute = i % 2 === 0; djCut(mute); djFlash(mute ? 'black' : 'flash', B * 480); });
     at(2, () => djCut(false));

@@ -126,7 +126,7 @@ export function detectGenre(title, duration) {
 //   - tăng tốc x1.25 trong 8 phách cuối đoạn dồn, về x1 đúng phách drop
 //   - bài chậm (mức quẩy): đoạn nghỉ chạy chậm x0.75 rồi trả lại
 export function createAutoDJ({ emit, scratch, party, rate }) {
-  let last = null, genre = { id: 'pop', energy: 1, bpm: 118 }, lvl = 2, slowP = null, stutterP = null;
+  let last = null, genre = { id: 'pop', energy: 1, bpm: 118 }, lvl = 2, slowP = null;
   const later = (ms, fn) => setTimeout(fn, ms);
   const PLAN = { 2: ['groove', 'build', 'drop', 'drop'], 1: ['groove', 'groove', 'build', 'drop'], 0: ['groove', 'groove', 'groove', 'break'] };
   const flurry = () => { [0.9, -0.8, 0.85, -0.9, 0.7, -0.6].forEach((v, i) => later(i * 45, () => scratch(v, i % 2))); };   // chà đĩa nhanh cuối đoạn
@@ -157,7 +157,7 @@ export function createAutoDJ({ emit, scratch, party, rate }) {
       if (pos === 8 && E >= 2 && lvl >= 2) emit('pad', 'siren');
       if (pos === 16) emit('pad', 'riser');                                  // rít dâng 16 phách → drop
       if (pos === 24 && lvl >= 2) { emit('pad', 'roll'); if (speedUp) emit('rate', 1.25); }   // trống dồn + tăng tốc 8 phách cuối
-      if (pos === 31) emit('combo', 'drop');                                 // im + tối 1 phách → drop nổ + nháy (liền mạch)
+      if (pos === 31) emit('combo', 'blackdrop');                            // tối om 1 phách → drop nổ + nháy (chỉ đèn, không tắt tiếng)
       if (pos % 8 === 0) emit('light', 'color');
       return;
     }
@@ -165,14 +165,13 @@ export function createAutoDJ({ emit, scratch, party, rate }) {
     if (sec === 'drop') {
       if (pos === 16 && lvl >= 2) { emit('light', 'strobe'); if (lvl >= 3 && rnd < 0.5) emit('pad', 'airhorn'); }
       if (pos === 8 && lvl >= 3 && rnd < 0.4) emit('pad', 'yeah');
-      if (pos === 14 && (lvl >= 3 || (lvl === 2 && P % 2 === 0))) { emit('combo', 'chop'); return; }   // chặt nhịp phách 14–16 → phách 16 nháy tiếp
-      if (pos === 30 && lvl >= 3 && P % 2 === 1) { emit('combo', 'chop'); return; }                    // cuối đoạn: xen kẽ chặt nhịp / chà đĩa
-      if (pos === 28 && lvl >= 3 && E >= 2 && P % 4 === 3 && stutterP !== P) { stutterP = P; emit('stutter'); }
+      if (pos === 14 && (lvl >= 3 || (lvl === 2 && P % 2 === 0))) { emit('combo', 'flash'); return; }  // flash liền phách 14–16 → phách 16 nháy tiếp
+      if (pos === 30 && lvl >= 3 && P % 2 === 1) { emit('combo', 'flash'); return; }                   // cuối đoạn: xen kẽ flash liền / chà đĩa
     }
     if (pos === 30 && lvl >= 2 && (sec === 'drop' || E >= 1) && rnd < 0.7) flurry();
     if (pos === 16 && sec === 'groove' && lvl >= 2 && E >= 1) emit('light', 'laser');
   }
-  return { tick, setGenre(g) { genre = g; last = null; slowP = stutterP = null; }, setLevel(l) { lvl = l; }, reset() { last = null; } };
+  return { tick, setGenre(g) { genre = g; last = null; slowP = null; }, setLevel(l) { lvl = l; }, reset() { last = null; } };
 }
 
 // ---------- bảng điều khiển của DJ ----------
