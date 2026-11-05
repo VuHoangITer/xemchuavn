@@ -289,6 +289,21 @@ async function deleteUser(name) {
   return true;
 }
 
+// Ngoại hình ngẫu nhiên cho bot lấp rạp (chỉ dùng đồ có trong tủ đồ)
+const SKINS = ['#f1c9a5', '#e8b48a', '#d9a07a', '#f6d7bd', '#c98f68', '#fbe3cf'];
+const PAINTS = ['#1f1f24', '#3b2a20', '#7a4a2a', '#d8b26a', '#e94f6a', '#4f7cff', '#2fbf8f', '#f0f0f0', '#9b5cff', '#ff9f43'];
+function randomLook(r = Math.random) {
+  const g = r() < 0.5 ? 'm' : 'f', pick = (a) => a[Math.floor(r() * a.length)];
+  const of = (slot) => CATALOG.items.filter((it) => it.slot === slot && okFor(it, g));
+  const u = { gender: g, skin: pick(SKINS), equip: {}, paint: {} };
+  for (const slot of ['top', 'bottom', 'shoes', 'hair', 'face']) { const list = of(slot); if (list.length) u.equip[slot] = pick(list).id; }
+  if (r() < 0.25) { const l = of('hat'); if (l.length) u.equip.hat = pick(l).id; }
+  if (r() < 0.2) { const l = of('glasses'); if (l.length) u.equip.glasses = pick(l).id; }
+  for (const slot of ['hair', 'top', 'bottom']) if (u.equip[slot] && r() < 0.6) u.paint[u.equip[slot]] = [pick(PAINTS), pick(PAINTS)];
+  ensureFashion(u);
+  return { gender: u.gender, skin: u.skin, equip: u.equip, paint: equippedPaint(u), pose: 'static' };
+}
+
 // Cho server.js: trang phục + phiên bản ảnh đại diện của 1 người
 function getProfile(name) {
   const u = users[keyOf(name)]; if (!u) return { look: null, av: 0 };
@@ -300,5 +315,5 @@ module.exports = {
   router, verify, getProfile, ready,
   // cho trang quản trị (admin.js)
   users: () => users, settings: () => settings, saveUsers, saveSettings, keyOf, cleanName,
-  isOwner, isAdmin, hasRole, deleteUser, banOf, ipBanOf, banMsg, touch, userOf,
+  isOwner, isAdmin, hasRole, deleteUser, randomLook, banOf, ipBanOf, banMsg, touch, userOf,
 };

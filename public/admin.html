@@ -79,6 +79,11 @@
   <section class="tab on" id="t-ov">
     <div class="stats" id="stats"></div>
     <div class="card">
+      <h2>🤖 Bot lấp đầy rạp công cộng</h2>
+      <div class="row"><button class="b" id="botBtn">…</button><span class="small muted" id="botInfo"></span></div>
+      <div class="small muted" style="margin-top:6px">Bật: rạp công cộng luôn kín ghế bằng khán giả ảo (tên, ngoại hình ngẫu nhiên). Mỗi người thật vào thì 1 bot đứng dậy nhường chỗ; người thật ra thì bot vào lại. Bot không chat, không tính vào vote bỏ qua / đèn bar.</div>
+    </div>
+    <div class="card">
       <h2>📢 Thông báo toàn server</h2>
       <div class="row"><input id="annText" maxlength="200" placeholder="VD: 21h tối nay chiếu phim mới, mọi người vào rạp nhé!" style="flex:1;min-width:220px"><button class="b p" id="annSend">Gửi</button></div>
       <div class="small muted" style="margin-top:6px">Hiện thành dòng thông báo cho mọi người đang online + ghi vào khung chat các phòng.</div>
@@ -165,6 +170,11 @@ async function loadOverview() {
   const o = await api('/overview');
   const st = [['Tài khoản', o.users], ['Đang online', o.online], ['Hoạt động 24h', o.active24h], ['Mới tạo 24h', o.new24h], ['Đang bị khoá', o.banned], ['Phòng đang mở', o.rooms], ['IP bị chặn', o.ipBans]];
   $('stats').innerHTML = st.map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('');
+  const B = o.bots;
+  $('botBtn').textContent = B.on ? '🤖 Đang BẬT — bấm để tắt' : 'Đang TẮT — bấm để bật';
+  $('botBtn').className = 'b ' + (B.on ? 'g' : 'p');
+  $('botInfo').textContent = B.on ? `${B.n} bot + ${B.real} người thật / ${B.seats} ghế` : `${B.real} người thật đang ở rạp công cộng`;
+  $('botBtn').onclick = async () => { if (await act('/bots', { on: !B.on }, B.on ? 'Đã tắt bot' : 'Đã bật bot — rạp kín ghế')) loadOverview(); };
   $('log').innerHTML = o.log.length ? o.log.map((l) => `<li><span class="muted small">${dt(l.t)}</span> · <b>${esc(l.by)}</b>: ${esc(l.what)}</li>`).join('') : '<li class="muted">Chưa có thao tác nào</li>';
 }
 $('annSend').onclick = async () => { const text = $('annText').value.trim(); if (!text) return; if (await act('/announce', { text }, 'Đã gửi thông báo')) { $('annText').value = ''; loadOverview(); } };
@@ -256,7 +266,7 @@ async function loadRooms() {
       </div>
     </div>
     <div class="small" style="margin-top:6px">${r.current ? '▶ ' + esc(r.current.title) + (r.current.by ? ' <span class="muted">· ' + esc(r.current.by) + '</span>' : '') : '<span class="muted">Chưa phát video</span>'}${r.queue ? ` <span class="muted">· ${r.queue} video chờ</span>` : ''}</div>
-    <div class="small muted" style="margin-top:6px">${r.users.length} người: ${r.users.length ? r.users.map((n) => `<a href="#" data-open="${esc(n)}">${esc(n)}</a>`).join(', ') : '—'}</div>
+    <div class="small muted" style="margin-top:6px">${r.bots ? `🤖 ${r.bots} bot · ` : ''}${r.users.length} người thật: ${r.users.length ? r.users.map((n) => `<a href="#" data-open="${esc(n)}">${esc(n)}</a>`).join(', ') : '—'}</div>
   </div>`).join('');
   $('rlist').querySelectorAll('[data-open]').forEach((a) => a.onclick = (e) => { e.preventDefault(); openUser(a.dataset.open); });
   $('rlist').querySelectorAll('[data-skip]').forEach((b) => b.onclick = async () => { if (await act('/room/skip', { id: b.dataset.skip }, 'Đã bỏ qua video')) loadRooms(); });

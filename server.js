@@ -131,7 +131,9 @@ function setMainRoom(tpl, name) {
     for (const sid of old.users.keys()) { const s = io.sockets.sockets.get(sid); if (s) { s.leave('main'); s.data.room = null; } }
   } else { nr.users = old.users; nr.seats = old.seats; nr.votes = old.votes; nr.party = old.party; }
   clearTimeout(old.bt);
+  if (old.tpl !== nr.tpl) nr.botN = 0; else nr.botN = old.botN || 0;
   rooms.set('main', nr);
+  balanceBots(nr, true);
 }
 
 function position(room) {
@@ -147,12 +149,14 @@ function setRate(room, r) {
   const t = position(room); room.rate = r; setPos(room, t);
 }
 
+// số người thật trong phòng (bot lấp rạp không được vote)
+const realCount = (room) => room.users.size - (room.botN || 0);
 function needVotes(room) {
-  return Math.max(1, Math.ceil(room.users.size * SKIP_RATIO));
+  return Math.max(1, Math.ceil(realCount(room) * SKIP_RATIO));
 }
 
 const PARTY_MS = 60 * 1000;      // đèn bar bật 1 phút rồi tự tắt (phải vote lại mới bật tiếp)
-function partyNeed(room) { return Math.max(1, Math.ceil(room.users.size * PARTY_RATIO)); }
+function partyNeed(room) { return Math.max(1, Math.ceil(realCount(room) * PARTY_RATIO)); }
 // Gọi sau mỗi lần số vote / số người thay đổi: đủ vote → bật + hẹn giờ tắt; tụt dưới mức → tắt luôn
 function checkParty(room) {
   const on = room.party.size >= partyNeed(room);
@@ -178,6 +182,7 @@ function snapshot(room) {
   for (const [id, u] of room.users) {
     // Rạp công cộng: gửi mọi người đang ngồi + tối đa 150 người đứng xem (để nhẹ khi quá đông)
     if (room.type === 'public' && u.seat == null && ++standing > 150) continue;
+    if (u.bot) { list.push({ id, name: u.name, seat: u.seat, voice: false, recline: u.recline, food: [], look: u.look, av: 0, bg: null, snap: u.snapUntil > Date.now() || undefined }); continue; }
     const pf = auth.getProfile(u.name);
     list.push({ id, name: u.name, seat: u.seat, voice: u.voice, recline: u.recline ?? 0.3, food: u.food || [], look: pf.look, av: pf.av, bg: pf.bg });
   }
@@ -318,9 +323,56 @@ function leaveRoom(socket) {
       }, 60_000);
     }
   }
+  balanceBots(room);                                       // rạp công cộng có bot: 1 bot vào lấp chỗ trống
   // vote có thể đủ sau khi người rời đi
   if (room.type === 'public' && room.current && room.votes.size >= needVotes(room)) startNext(room);
   else scheduleBroadcast(room);
+}
+
+// ---------- Bot lấp đầy rạp công cộng (bật / tắt trong trang quản trị) ----------
+// Bật: rạp công cộng luôn đầy ghế. Mỗi người thật vào → 1 bot đứng dậy đi ra nhường chỗ; người thật ra → 1 bot vào lại.
+// Bot chỉ ngồi xem: không chat, không vote (vote bỏ qua / đèn bar chỉ tính người thật).
+const BOT_A = ['Minh', 'Anh', 'Linh', 'Huy', 'Trang', 'Nam', 'Vy', 'Khoa', 'Thảo', 'Long', 'Ngọc', 'Phúc', 'Hà', 'Duy', 'My', 'Quân', 'Tú', 'Hân', 'Bảo', 'Nhi',
+  'Khánh', 'Trâm', 'Đạt', 'Yến', 'Sơn', 'Thư', 'Kiên', 'Mai', 'Tâm', 'Hiếu', 'Lan', 'Phong', 'Giang', 'Châu', 'Vinh', 'Uyên', 'Thắng', 'Diệp', 'Hưng', 'Ly'];
+const BOT_B = ['dz', 'kute', '2k5', '2k7', 'idol', 'vn', 'pro', 'xinh', 'baby', 'chan', 'kun', 'official', 'nè', 'oi', 'cute', 'no1'];
+let botSeq = 0;
+function botName(room) {
+  const taken = new Set([...room.users.values()].map((u) => auth.keyOf(u.name)));
+  for (let k = 0; k < 40; k++) {
+    const a = BOT_A[Math.floor(Math.random() * BOT_A.length)], b = BOT_A[Math.floor(Math.random() * BOT_A.length)], r = Math.random();
+    let n = r < 0.3 ? `${a} ${b}` : r < 0.55 ? `${a.toLowerCase()}${Math.floor(Math.random() * 99) + 1}` : r < 0.8 ? `${a.toLowerCase()}.${BOT_B[Math.floor(Math.random() * BOT_B.length)]}` : `${a}${b}`;
+    n = n.slice(0, 16);
+    const key = auth.keyOf(n);
+    if (n.length >= 3 && !taken.has(key) && !auth.users()[key]) return n;   // không trùng tài khoản thật
+  }
+  return 'khach' + (++botSeq);
+}
+function addBot(room, snap) {
+  const free = []; for (let i = 0; i < room.nSeats; i++) if (room.seats[i] == null) free.push(i);
+  if (!free.length) return false;
+  const id = 'bot_' + (++botSeq), seat = free[Math.floor(Math.random() * free.length)];
+  room.users.set(id, { name: botName(room), bot: true, voice: false, seat, recline: Math.round((0.1 + Math.random() * 0.55) * 100) / 100, look: auth.randomLook(), snapUntil: snap ? Date.now() + 4000 : 0 });
+  room.seats[seat] = id; room.botN = (room.botN || 0) + 1;
+  return true;
+}
+function removeBot(room, id) {
+  if (!id) { const ids = [...room.users.keys()].filter((k) => room.users.get(k).bot); if (!ids.length) return false; id = ids[Math.floor(Math.random() * ids.length)]; }
+  const u = room.users.get(id); if (!u || !u.bot) return false;
+  if (u.seat != null && room.seats[u.seat] === id) room.seats[u.seat] = null;
+  room.users.delete(id); room.botN--; return true;
+}
+// giữ số bot = số ghế còn thiếu (chỉ rạp công cộng, khi đang bật)
+function balanceBots(room, snap = false) {
+  if (!room || room.id !== 'main') return;
+  const on = !!auth.settings().bots, target = on ? Math.max(0, room.nSeats - realCount(room)) : 0;
+  let changed = false;
+  while ((room.botN || 0) > target && removeBot(room)) changed = true;
+  while ((room.botN || 0) < target && addBot(room, snap)) changed = true;
+  if (changed) scheduleBroadcast(room);
+}
+// người thật vào lúc rạp đầy: 1 bot nhường ghế trước
+function makeSeatForReal(room) {
+  if (room.id === 'main' && room.botN && randomFreeSeat(room) == null) removeBot(room);
 }
 
 // ---------- Bàn DJ ----------
@@ -411,6 +463,7 @@ io.on('connection', (socket) => {
 
     clearTimeout(room.emptyTimer);
     const name = socket.data.username;
+    makeSeatForReal(room);
     const seat = randomFreeSeat(room);
     room.users.set(socket.id, { name, voice: false, seat });
     checkParty(room);                 // thêm người → cần nhiều vote hơn
@@ -422,6 +475,7 @@ io.on('connection', (socket) => {
     socket.emit('chat:history', room.chat);
     if (room.type === 'private') sysMsg(room, `${name} đã vào phòng`);
     socket.emit('state', snapshot(room)); // người mới thấy ngay
+    balanceBots(room);
     scheduleBroadcast(room);
   });
 
@@ -432,6 +486,13 @@ io.on('connection', (socket) => {
     const now = Date.now();
     if (now - socket.data.lastSeat < 800) return;
     socket.data.lastSeat = now;
+    const occ = room.seats[idx] != null && room.users.get(room.seats[idx]);
+    if (occ && occ.bot) {                                          // ghế của bot: bot đứng dậy đổi sang ghế cũ của mình (hoặc ra về)
+      const bid = room.seats[idx], back = me.seat != null && me.seat < room.nSeats ? me.seat : null;
+      room.seats[idx] = null;
+      if (back != null) { if (room.seats[back] === socket.id) room.seats[back] = null; occ.seat = back; room.seats[back] = bid; me.seat = null; }
+      else removeBot(room, bid);
+    }
     if (room.seats[idx] != null) return socket.emit('toast', 'Ghế này có người ngồi rồi');
     if (room.dj && room.dj.id === socket.id) endDJ(room, false);   // DJ đi chỗ khác → đóng bàn DJ
     if (me.seat != null && room.seats[me.seat] === socket.id) room.seats[me.seat] = null;
@@ -725,11 +786,12 @@ setInterval(() => {
 
 // chờ nạp xong dữ liệu (file / MongoDB) rồi mới mở cổng
 // trang quản trị
-app.use('/api/admin', require('./admin')({ io, rooms, auth, TEMPLATES, CINEMA_THEMES, leaveRoom, startNext, sysMsg, setMainRoom, endDJ }));
+app.use('/api/admin', require('./admin')({ io, rooms, auth, TEMPLATES, CINEMA_THEMES, leaveRoom, startNext, sysMsg, setMainRoom, endDJ, balanceBots }));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Không có API này' }));
 
 auth.ready.then(() => {                                       // áp cài đặt đã lưu cho rạp công cộng
   const st = auth.settings();
   if ((st.mainTpl && TEMPLATES[st.mainTpl] && st.mainTpl !== 'cinema') || st.mainName) setMainRoom(TEMPLATES[st.mainTpl] ? st.mainTpl : 'cinema', st.mainName);
+  balanceBots(rooms.get('main'), true);                      // bot lấp rạp (nếu đang bật)
 }).then(() => server.listen(PORT, () => console.log(`XEMCHUAVN chạy tại http://localhost:${PORT}`)))
   .catch((e) => { console.error('Không kết nối được nơi lưu dữ liệu:', e.message); process.exit(1); });

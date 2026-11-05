@@ -2696,7 +2696,7 @@ function syncAvatars(users, first) {
     let a = avatars.get(u.id);
     if (!a) {
       a = createAvatar(u, u.id === myId); avatars.set(u.id, a); walkers.add(a); scene.add(a.g);
-      if (first) placeAtSeat(a, u.seat, true);                        // người có sẵn trong rạp: đã ngồi
+      if (first || u.snap) placeAtSeat(a, u.seat, true);              // người có sẵn trong rạp (hoặc khán giả vừa được lấp hàng loạt): đã ngồi
       else {                                                           // người mới vào: đi từ cửa tới ghế
         a.g.position.copy(ENTRANCE); a.g.rotation.y = Math.PI; a.seat = u.seat; setSitting(a, false);
         a.path = routeFrom(ENTRANCE, u.seat);
@@ -4556,7 +4556,7 @@ function renderSeatModal() {
     b.title = tk ? `${seatName(i)} · ${seatOwner.get(i) || 'đã có người'}` : `Ghế ${seatName(i)}`;
     b.onclick = () => {
       if (mine) return closeSeat();
-      if (tk) return toast(`Ghế ${seatName(i)} có ${seatOwner.get(i)} ngồi rồi`);
+      if (tk) { socket.emit('seat:take', i); closeSeat(); return; }   // ghế có người: hỏi server (khán giả ảo sẽ nhường, người thật thì báo đã có người)
       socket.emit('seat:take', i); closeSeat(); toast(`Đang đi tới ghế ${seatName(i)}...`);
     };
     return b;

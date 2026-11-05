@@ -8,7 +8,7 @@
 const express = require('express');
 
 module.exports = function setupAdmin(ctx) {
-  const { io, rooms, auth, TEMPLATES, CINEMA_THEMES, leaveRoom, startNext, sysMsg, setMainRoom, endDJ } = ctx;
+  const { io, rooms, auth, TEMPLATES, CINEMA_THEMES, leaveRoom, startNext, sysMsg, setMainRoom, endDJ, balanceBots } = ctx;
   const router = express.Router();
   router.use(express.json({ limit: '20kb' }));
 
@@ -64,6 +64,7 @@ module.exports = function setupAdmin(ctx) {
       users: all.length, online: online.size, banned: all.filter((u) => auth.banOf(u)).length,
       new24h: all.filter((u) => u.createdAt > now - 864e5).length, active24h: all.filter((u) => u.lastSeen > now - 864e5).length,
       rooms: rooms.size, ipBans: (S().ipBans || []).length, log: (S().log || []).slice(0, 30),
+      bots: { on: !!S().bots, n: rooms.get('main').botN || 0, real: rooms.get('main').users.size - (rooms.get('main').botN || 0), seats: rooms.get('main').nSeats },
     });
   });
 
@@ -160,6 +161,14 @@ module.exports = function setupAdmin(ctx) {
     res.json({ ok: true });
   });
 
+  router.post('/bots', (req, res) => {                       // bật / tắt bot lấp đầy rạp công cộng
+    const st = S(); st.bots = !!req.body.on;
+    balanceBots(rooms.get('main'), true);
+    log(req.admin, `${st.bots ? 'Bật' : 'Tắt'} bot lấp đầy rạp công cộng`);
+    const m = rooms.get('main');
+    res.json({ ok: true, n: m.botN || 0 });
+  });
+
   // ---------- IP bị chặn ----------
   router.get('/ipbans', (req, res) => res.json(S().ipBans || []));
   router.post('/ipunban', (req, res) => {
@@ -172,7 +181,7 @@ module.exports = function setupAdmin(ctx) {
     res.json([...rooms.values()].map((r) => ({
       id: r.id, name: r.name, type: r.type, tpl: r.tpl, owner: r.owner, locked: !!r.pw, queue: r.queue.length,
       current: r.current ? { title: r.current.title || r.current.vid || '', by: r.current.by || '' } : null,
-      users: [...r.users.values()].map((u) => u.name),
+      users: [...r.users.values()].filter((u) => !u.bot).map((u) => u.name), bots: r.botN || 0,
     })).sort((a, b) => (a.type === 'public' ? -1 : b.type === 'public' ? 1 : b.users.length - a.users.length)));
   });
   router.post('/room/skip', (req, res) => {
