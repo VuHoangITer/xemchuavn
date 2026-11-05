@@ -1,0 +1,21 @@
+# Cấu hình deploy lên Render (gói Free). Render đọc file này khi tạo "Blueprint" từ repo GitHub.
+services:
+  - type: web
+    name: rapchung
+    runtime: node
+    plan: free
+    region: singapore          # gần Việt Nam nhất
+    buildCommand: npm ci --omit=dev
+    startCommand: node server.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: MONGODB_URI       # dán chuỗi kết nối MongoDB Atlas vào phần Environment của Render
+        sync: false
+      - key: TURN_URLS         # (tuỳ chọn) máy chủ TURN, vd: turn:global.relay.metered.ca:80,turns:global.relay.metered.ca:443
+        sync: false
+      - key: TURN_USERNAME
+        sync: false
+      - key: TURN_CREDENTIAL
+        sync: false

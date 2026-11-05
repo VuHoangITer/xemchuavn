@@ -1,0 +1,17 @@
+# thư viện cài lại được bằng npm
+node_modules/
+
+# dữ liệu người dùng + khoá bí mật — KHÔNG đưa lên GitHub
+data/
+.env
+.env.*
+
+# cấu hình riêng của máy / trình soạn thảo
+.claude/
+.idea/
+.vscode/
+
+# rác hệ thống
+.DS_Store
+Thumbs.db
+*.log
