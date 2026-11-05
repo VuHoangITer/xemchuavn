@@ -11,6 +11,7 @@ const $ = (id) => document.getElementById(id);
 // PWA: đăng ký service worker (cài app lên màn hình chính)
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('/sw.js').catch(() => {});
 const CATALOG = await fetch('/catalog.json').then((r) => r.json());
+const SITE = await fetch('/api/config').then((r) => r.json()).catch(() => ({}));   // bố cục + màu rạp do trang quản trị chọn
 const ITEM = new Map(CATALOG.items.map((it) => [it.id, it]));
 const SLOT_NAME = Object.fromEntries(CATALOG.slots.map((s) => [s.id, s.name]));
 const OPTIONAL_SLOTS = ['hat', 'glasses', 'back', 'mount', 'pet', 'avframe', 'nameplate', 'pfx', 'cardframe', 'namefont', 'nameeffect'];
@@ -307,9 +308,29 @@ const ROOM_TEMPLATES = {
     scr: { w: 8.8, h: 4.95, y: 4.0, z: -6.4 }, stage: null, dance: 0, party: false, decor: 'bedroom', zoneSigns: false, aisles: false,
   },
 };
-const TPL_ID = (() => { const t = new URLSearchParams(location.search).get('tpl'); return ROOM_TEMPLATES[t] ? t : 'cinema'; })();
+// bố cục mặc định của rạp công cộng do trang quản trị chọn; phòng riêng mặc định 'cinema'
+const MAIN_TPL = ROOM_TEMPLATES[SITE.mainTpl] ? SITE.mainTpl : 'cinema';
+const TPL_ID = (() => {
+  const sp = new URLSearchParams(location.search), t = sp.get('tpl'), r = (sp.get('room') || 'main').toLowerCase();
+  return ROOM_TEMPLATES[t] ? t : r === 'main' ? MAIN_TPL : 'cinema';
+})();
 const TPLC = ROOM_TEMPLATES[TPL_ID];
 const ROW_DEFS = TPLC.rows;
+// ---- Bảng màu rạp lớn (chọn trong trang quản trị; tên phải khớp CINEMA_THEMES ở server.js)
+// a/a2 = màu nhấn chính, b/b2 = màu phụ, grad = nền cờ phướn, surf = sàn / tường / trần / đèn LED
+const CINEMA_THEMES = {
+  demon: { a: 0xff2a3d, a2: 0xff2238, b: 0x8a2be2, b2: 0x9b30ff, lens: 0xffc2c8, crystal: 0xff7a86, beam: 0xff3a4a, beam2: 0x9b40ff, banner: 0xd6c0c8,
+    grad: ['#12040a', '#1c0726', '#240612', '#070205'],
+    surf: { floor: 0x120709, wall: 0x0e0508, ceil: 0x070204, back: 0x10060a, front: 0x0c0407, step: 0x1d0a10, aisle: 0x260c14, led: 0xff2238, hemi: [0xd8a0b4, 0x12050a, 0.58], glow: 380, frame: 0xff2238, frameW: 0.12 } },
+  mystic: { a: 0x3fe6d0, a2: 0x2fd8c4, b: 0x7b5cff, b2: 0xb98cff, lens: 0xd8fbff, crystal: 0x9ff7ff, beam: 0x7ff2ff, beam2: 0xb98cff, banner: 0xc8dcff,
+    grad: ['#040812', '#0b0a26', '#061520', '#020307'],
+    surf: { floor: 0x0c0f19, wall: 0x0a0c16, ceil: 0x05060d, back: 0x0b0d18, front: 0x090b14, step: 0x121729, aisle: 0x171c33, led: 0x3fe6d0, hemi: [0x9fb6ff, 0x0a0a16, 0.6], glow: 380, frame: 0x3fe6d0, frameW: 0.12 } },
+  gold: { a: 0xe8b45e, a2: 0xc9a24a, b: 0xb3262e, b2: 0xd8434b, lens: 0xfff1d2, crystal: 0xffe2a0, beam: 0xffdca0, beam2: 0xffc890, banner: 0xe8dccb,
+    grad: ['#0d0905', '#1a0d0a', '#1d1408', '#050302'],
+    surf: { floor: 0x18181b, wall: 0x111113, ceil: 0x0b0b0d, back: 0x131315, front: 0x111114, step: 0x1d1d21, aisle: 0x26262b, led: 0xe8b45e, hemi: [0xb4b0bc, 0x141416, 0.62], glow: 380, frame: 0xc9a24a, frameW: 0.16 } },
+};
+const CT = CINEMA_THEMES[SITE.cinemaTheme] || CINEMA_THEMES.demon;
+const cssHex = (n) => '#' + n.toString(16).padStart(6, '0');
 const AISLE_W = TPLC.aisleW, AISLE_X = TPLC.aisleX, BLOCK_IN = AISLE_X + AISLE_W / 2;   // mép trong 2 khối bên
 const SIDE_X0 = TPLC.sideX0;                                             // ngoài mép này là lối đi sát tường
 const SIDE_C = (BLOCK_IN + SIDE_X0) / 2;                                 // tâm khối bên (khối bên căn giữa → đều nhau)
@@ -439,8 +460,7 @@ controls.update(); controls.saveState();
 // ---- Ánh sáng: rạp tối sang trọng, điểm nhấn vàng ấm + ánh màn hắt xuống
 // Màu sắc + ánh sáng theo chủ đề phòng
 const THEME = {
-  cinema:   { floor: 0x120709, wall: 0x0e0508, ceil: 0x070204, back: 0x10060a, front: 0x0c0407, step: 0x1d0a10, aisle: 0x260c14, led: 0xff2238,
-              hemi: [0xd8a0b4, 0x12050a, 0.58], glow: 380, frame: 0xff2238, frameW: 0.12 },
+  cinema:   CT.surf,
   galaxy:   { floor: 0x2a2623, wall: 0x2b2724, ceil: 0x0c0a0f, back: 0x25211e, front: 0x12100e, step: 0x2e2a27, aisle: 0x34302c, led: 0xffb35a,
               hemi: [0xffd9b0, 0x1a1410, 0.5], glow: 140, frame: 0x080808, frameW: 0.5 },
   lounge:   { floor: 0x1a171d, wall: 0x141217, ceil: 0x05040a, back: 0x121016, front: 0x0c0b0e, step: 0x1d1a21, aisle: 0x1d1a21, led: 0xa15cff,
@@ -817,7 +837,7 @@ const PARTY_TINT = [];                                         // vật liệu �
 const LENS_MATS = [];                                          // mặt đèn rọi 2 bên
 let BEAM_MAT2 = null;                                          // luồng đèn rọi nhóm 2 (khác màu nhóm 1)
 const MYST = TPLC.decor === 'cinema';                       // rạp lớn: tông ác quỷ đỏ máu / tím trầm
-const LED_BASE = new THREE.Color(THEME.led), BEAM_BASE = new THREE.Color(MYST ? 0xff3a4a : 0xffdca0), BEAM_BASE2 = new THREE.Color(MYST ? 0x9b40ff : 0xffdca0), LENS_BASE = new THREE.Color(MYST ? 0xffc2c8 : 0xfff1d2), _pc = new THREE.Color();
+const LED_BASE = new THREE.Color(THEME.led), BEAM_BASE = new THREE.Color(MYST ? CT.beam : 0xffdca0), BEAM_BASE2 = new THREE.Color(MYST ? CT.beam2 : 0xffdca0), LENS_BASE = new THREE.Color(MYST ? CT.lens : 0xfff1d2), _pc = new THREE.Color();
 const MYSTIC_SPIN = [];                                      // vật thể xoay / trôi chậm (ấn chú, pha lê, bụi phép)
 // vật liệu cộng sáng, không ghi alpha → không che video phía sau canvas
 const ADD = { transparent: true, depthWrite: false, fog: false, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
@@ -1022,8 +1042,8 @@ if (TPLC.decor === 'cinema') {
   // ===== Rạp lớn phong cách ÁC QUỶ: băng rôn phù văn phát sáng đỏ máu / tím trầm, ấn chú trên trần, đèn pha lê, loa line-array =====
   const glow = (color) => new THREE.MeshBasicMaterial({ color });
   BEAM_MAT.color.copy(BEAM_BASE); BEAM_MAT2 = BEAM_MAT.clone(); BEAM_MAT2.color.copy(BEAM_BASE2);
-  const tealLed = glow(0xff2238); PARTY_TINT.push(tealLed);
-  const violet = glow(0x8a2be2);
+  const tealLed = glow(CT.a2); PARTY_TINT.push(tealLed);
+  const violet = glow(CT.b);
   const RUNES = 'ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ';
   // vẽ 1 ấn chú tròn (vòng tròn đồng tâm + đa giác sao + phù văn quanh vòng)
   const sigil = (x, cx, cy, R, col, n = 6, seed = 1) => {
@@ -1039,9 +1059,9 @@ if (TPLC.decor === 'cinema') {
   // băng rôn phù văn trên tường (3 kiểu luân phiên)
   const bannerTex = (seed) => {
     const W = 256, H = 2048, c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
-    const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#12040a'); g.addColorStop(0.5, seed % 2 ? '#1c0726' : '#240612'); g.addColorStop(1, '#070205');
+    const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, CT.grad[0]); g.addColorStop(0.5, seed % 2 ? CT.grad[1] : CT.grad[2]); g.addColorStop(1, CT.grad[3]);
     x.fillStyle = g; x.fillRect(0, 0, W, H);
-    const A = seed % 2 ? '#9b30ff' : '#ff2a3d', B = seed % 2 ? '#ff2a3d' : '#9b30ff';
+    const A = seed % 2 ? cssHex(CT.b2) : cssHex(CT.a), B = seed % 2 ? cssHex(CT.a) : cssHex(CT.b2);
     x.strokeStyle = A; x.shadowColor = A; x.shadowBlur = 10; x.lineWidth = 3; x.strokeRect(14, 14, W - 28, H - 28); x.lineWidth = 1.5; x.strokeRect(24, 24, W - 48, H - 48);
     sigil(x, W / 2, 330, 100, A, 5, seed);   // ngôi sao năm cánh
     sigil(x, W / 2, 1450, 80, B, 6, seed + 4);
@@ -1051,7 +1071,7 @@ if (TPLC.decor === 'cinema') {
     for (let i = 0; i < 5; i++) { x.beginPath(); x.moveTo(W / 2 - 40 + i * 4, 1660 + i * 60); x.lineTo(W / 2 + 40 - i * 4, 1660 + i * 60); x.stroke(); }
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
   };
-  const bannerMats = [0, 1, 2].map((s) => new THREE.MeshBasicMaterial({ map: bannerTex(s + 1), color: 0xd6c0c8 }));
+  const bannerMats = [0, 1, 2].map((s) => new THREE.MeshBasicMaterial({ map: bannerTex(s + 1), color: CT.banner }));
   const panelH = HALL_H - 1.2;
   for (const sx of [-1, 1]) {
     for (let z = HALL_FRONT + 2.4, i = 0; z < HALL_BACK - 1.5; z += 4.2, i++) {
@@ -1065,7 +1085,7 @@ if (TPLC.decor === 'cinema') {
         rb(0.18, 0.7, 0.18, 0x120609, sx * 0.45, 0.25, 0, g, 0.05);
         const body = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.42, 1.0, 16), smat(0x1a0a10, { metalness: 0.6 }));
         body.rotation.z = sx * 0.9; g.add(body);
-        const lens = new THREE.Mesh(new THREE.CircleGeometry(0.34, 16), glow(0xffc2c8)); LENS_MATS.push(lens.material);
+        const lens = new THREE.Mesh(new THREE.CircleGeometry(0.34, 16), glow(CT.lens)); LENS_MATS.push(lens.material);
         lens.position.set(-sx * 0.42, -0.31, 0); lens.rotation.set(0, -sx * Math.PI / 2, 0); lens.rotateX(-0.9); g.add(lens);
         if (z > 6) {                                       // đèn gần màn không có luồng sáng → không bao giờ đè lên màn chiếu
           const pivot = new THREE.Group(); pivot.position.copy(lens.position); g.add(pivot);
@@ -1080,13 +1100,13 @@ if (TPLC.decor === 'cinema') {
     const cove2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, HALL_D - 2), violet);
     cove2.position.set(sx * (HALL_X - 0.35), 0.35, HALL_ZC); scene.add(cove2);
   }
-  for (const [x, z, c] of [[-HALL_X + 3, 2, 0xff2a3d], [HALL_X - 3, 2, 0x8a2be2], [-HALL_X + 3, 22, 0x8a2be2], [HALL_X - 3, 22, 0xff2a3d]]) {
+  for (const [x, z, c] of [[-HALL_X + 3, 2, CT.a], [HALL_X - 3, 2, CT.b], [-HALL_X + 3, 22, CT.b], [HALL_X - 3, 22, CT.a]]) {
     const l = new THREE.PointLight(c, 80, 26, 1.8); l.position.set(x, 15, z); scene.add(l);
   }
   // ấn chú lớn phát sáng trên trần (xoay chậm)
   {
     const c = document.createElement('canvas'); c.width = c.height = 1024; const x = c.getContext('2d');
-    sigil(x, 512, 512, 470, '#ff2a3d', 5, 3); sigil(x, 512, 512, 230, '#9b30ff', 6, 9);
+    sigil(x, 512, 512, 470, cssHex(CT.a), 5, 3); sigil(x, 512, 512, 230, cssHex(CT.b2), 6, 9);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     const m = new THREE.Mesh(new THREE.PlaneGeometry(26, 26), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor }));
     m.position.set(0, HALL_H - 0.25, HALL_ZC + 4); m.rotation.x = Math.PI / 2; m.userData.spin = 0.05; scene.add(m); MYSTIC_SPIN.push(m);
@@ -1095,7 +1115,7 @@ if (TPLC.decor === 'cinema') {
   }
   // bụi phép phát sáng lơ lửng trong không khí
   {
-    const N = 260, pos = new Float32Array(N * 3), col = new Float32Array(N * 3), cA = new THREE.Color(0xff2a3d), cB = new THREE.Color(0x9b30ff);
+    const N = 260, pos = new Float32Array(N * 3), col = new Float32Array(N * 3), cA = new THREE.Color(CT.a), cB = new THREE.Color(CT.b2);
     for (let i = 0; i < N; i++) { pos.set([(Math.random() * 2 - 1) * (HALL_X - 1), 3 + Math.random() * (HALL_H - 5), HALL_FRONT + Math.random() * (HALL_BACK - HALL_FRONT)], i * 3); col.set((i % 2 ? cA : cB).toArray(), i * 3); }
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.16, vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor }));   // cộng sáng nhưng không ghi alpha → không che video
@@ -1108,10 +1128,10 @@ if (TPLC.decor === 'cinema') {
     const base = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.55, 0.35, 8), stone); base.position.y = 0.18; g.add(base);
     const col = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 1.5, 8), stone); col.position.y = 1.1; g.add(col);
     const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.25, 0.3, 8), stone); cup.position.y = 1.95; g.add(cup);
-    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 0), new THREE.MeshStandardMaterial({ color: 0xff7a86, emissive: 0xff2238, emissiveIntensity: 1.6, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.9 }));
+    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 0), new THREE.MeshStandardMaterial({ color: CT.crystal, emissive: CT.a2, emissiveIntensity: 1.6, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.9 }));
     crystal.position.y = 2.65; crystal.scale.y = 1.6; crystal.userData.spin = 0.6; crystal.userData.bob = 2.65; g.add(crystal); MYSTIC_SPIN.push(crystal);
     for (let k = 0; k < 3; k++) { const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), crystal.material); const a = k / 3 * Math.PI * 2; s.position.set(Math.cos(a) * 0.4, 2.15, Math.sin(a) * 0.4); s.scale.y = 1.8; g.add(s); }
-    const l = new THREE.PointLight(0xff2a3d, 18, 7, 2); l.position.y = 2.7; g.add(l);
+    const l = new THREE.PointLight(CT.a, 18, 7, 2); l.position.y = 2.7; g.add(l);
   }
   // viền neon mép sân khấu
   { const e = new THREE.Mesh(new THREE.BoxGeometry(SCR_W + 6, 0.06, 0.06), tealLed); e.position.set(0, STAGE_H + 0.03, TPLC.stage.z1 + 0.02); scene.add(e); }
@@ -4403,7 +4423,7 @@ $('dShare').onclick = () => (shareStream ? stopShare() : startShare());
 // =====================================================================
 //  Phòng + Chọn ghế + Tài khoản + Socket
 // =====================================================================
-let token = localStorage.getItem('rc_token'), username = null, socket = null, authMode = 'login';
+let token = localStorage.getItem('rc_token'), username = null, socket = null, authMode = 'login', isAdmin = false;
 let roomName = 'Rạp công cộng', roomPass = '', needFirst = false;
 const q = new URLSearchParams(location.search);
 
@@ -4422,6 +4442,13 @@ function showOnly(which) {
   document.body.classList.toggle('in-room', which === 'room');
 }
 function logout() { localStorage.removeItem('rc_token'); token = null; location.href = location.pathname; }
+// bị khoá: đăng xuất, hiện lý do ở màn đăng nhập
+function bannedOut(msg) {
+  inRoom = false; if (socket) socket.disconnect();
+  localStorage.removeItem('rc_token'); token = null; sessionStorage.setItem('rc_ban', msg);
+  location.href = location.pathname;
+}
+{ const b = sessionStorage.getItem('rc_ban'); if (b) { sessionStorage.removeItem('rc_ban'); $('auErr').textContent = b; } }
 $('btnLogout').onclick = logout;
 
 // ---- Đăng nhập / đăng ký
@@ -4442,6 +4469,7 @@ $('authForm').addEventListener('submit', async (e) => {
   try {
     const r = await api('/api/' + authMode, { username: u, password: p });
     token = r.token; username = r.username; localStorage.setItem('rc_token', token); $('auPass').value = $('auPass2').value = '';
+    api('/api/me').then((m) => { isAdmin = !!m.admin; $('btnAdmin').classList.toggle('hidden', !isAdmin); }).catch(() => {});
     afterAuth();
   } catch (err) { $('auErr').textContent = err.message; }
   $('auSubmit').disabled = false;
@@ -4598,7 +4626,10 @@ function doJoin(room, password, rejoin) {
     if (tpl !== TPL_ID) {
       redirecting = true;                                      // bỏ qua dữ liệu phòng mới cho tới khi trang nạp lại
       if (password) sessionStorage.setItem('rc_pw_' + res.id, password);
-      location.href = res.id === 'main' ? location.pathname : '?room=' + res.id + (tpl !== 'cinema' ? '&tpl=' + tpl : '');
+      const qs = new URLSearchParams();                        // rạp công cộng: bố cục mặc định đọc từ /api/config nên không cần ?tpl
+      if (res.id !== 'main') qs.set('room', res.id);
+      if (tpl !== (res.id === 'main' ? MAIN_TPL : 'cinema')) qs.set('tpl', tpl);
+      location.href = location.pathname + (qs.toString() ? '?' + qs : '');
       return;
     }
     teardownVoice();
@@ -4610,6 +4641,7 @@ function doJoin(room, password, rejoin) {
 
 function afterAuth() {
   $('umName').textContent = 'Đăng nhập: ' + username;
+  $('btnAdmin').classList.toggle('hidden', !isAdmin);
   renderAvatarBtn();
   if (myCreatedAt == null) api('/api/me').then((r) => { setFashion(r); myAvatarVer = r.avatarVer || 0; myCreatedAt = r.createdAt; myBg = r.bg || null; renderAvatarBtn(); }).catch(() => {});
   connectSocket();
@@ -4621,7 +4653,18 @@ function afterAuth() {
 function connectSocket() {
   if (socket) socket.disconnect();
   socket = io({ auth: { token } });
-  socket.on('connect_error', (err) => { if (err.message === 'unauthorized') logout(); });
+  socket.on('connect_error', (err) => { if (err.message === 'unauthorized') logout(); else if (err.message === 'banned') bannedOut('Tài khoản hoặc mạng của bạn đã bị khoá'); });
+  // ---- lệnh từ trang quản trị
+  socket.on('banned', (d) => bannedOut((d && d.message) || 'Tài khoản đã bị khoá'));
+  socket.on('admin:kicked', (d) => { inRoom = false; toast((d && d.message) || 'Bạn đã bị mời ra khỏi rạp'); socket.disconnect(); setTimeout(() => (location.href = location.pathname), 2500); });
+  socket.on('room:closed', (d) => { inRoom = false; toast((d && d.message) || 'Phòng đã đóng'); setTimeout(() => (location.href = location.pathname), 1800); });
+  socket.on('announce', (d) => d && d.text && toast('📢 ' + d.text));
+  socket.on('server:reload', (d) => {
+    if (d && d.what === 'theme' && TPLC.decor !== 'cinema') return;      // đổi màu rạp lớn: phòng loại khác không cần tải lại
+    redirecting = true; toast((d && d.message) || 'Đang tải lại…');
+    if (roomPass && roomId) sessionStorage.setItem('rc_pw_' + roomId, roomPass);
+    setTimeout(() => location.reload(), 1500);
+  });
   socket.on('connect', () => { if (inRoom) { teardownVoice(); doJoin(roomId, roomPass, true); } });
   socket.on('disconnect', () => toast('Mất kết nối, đang thử kết nối lại...'));
   socket.on('kicked', () => { toast('Tài khoản này vừa vào phòng ở nơi khác'); inRoom = false; socket.disconnect(); setTimeout(() => (location.href = location.pathname), 1500); });
@@ -4656,7 +4699,7 @@ function connectSocket() {
 // ---- Khởi động: kiểm tra token cũ
 (async () => {
   if (!token) return showOnly('auth');
-  try { const r = await api('/api/me'); username = r.username; setFashion(r); myAvatarVer = r.avatarVer || 0; myCreatedAt = r.createdAt; myBg = r.bg || null; afterAuth(); }
-  catch { localStorage.removeItem('rc_token'); token = null; showOnly('auth'); }
+  try { const r = await api('/api/me'); username = r.username; setFashion(r); myAvatarVer = r.avatarVer || 0; myCreatedAt = r.createdAt; myBg = r.bg || null; isAdmin = !!r.admin; afterAuth(); }
+  catch (e) { localStorage.removeItem('rc_token'); token = null; if (/khoá|chặn/.test(e.message)) $('auErr').textContent = e.message; showOnly('auth'); }
 })();
 applyVolume();

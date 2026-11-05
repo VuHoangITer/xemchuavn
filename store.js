@@ -12,6 +12,7 @@ const DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const USERS_FILE = path.join(DIR, 'users.json');
 const SECRET_FILE = path.join(DIR, 'secret.key');
 const FILE_DIR = path.join(DIR, 'avatars');
+const SETTINGS_FILE = path.join(DIR, 'settings.json');
 const fileName = (name) => path.join(FILE_DIR, crypto.createHash('sha1').update(name).digest('hex') + '.img');
 
 let mongo = null, colUsers = null, colFiles = null, colMeta = null;
@@ -85,4 +86,16 @@ async function delFile(name) {
   await fs.promises.rm(fileName(name), { force: true });
 }
 
-module.exports = { init, loadSecret, saveUsers, putFile, getFile, delFile, usingMongo: () => !!colUsers };
+// ---- cài đặt do trang quản trị chỉnh (giao diện rạp, danh sách admin, IP bị chặn...)
+async function loadSettings() {
+  if (colMeta) { const d = await colMeta.findOne({ _id: 'settings' }); return (d && d.value) || {}; }
+  try { return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); } catch { return {}; }
+}
+async function saveSettings(obj) {
+  if (colMeta) return colMeta.updateOne({ _id: 'settings' }, { $set: { value: obj } }, { upsert: true });
+  fs.mkdirSync(DIR, { recursive: true });
+  await fs.promises.writeFile(SETTINGS_FILE + '.tmp', JSON.stringify(obj, null, 1));
+  await fs.promises.rename(SETTINGS_FILE + '.tmp', SETTINGS_FILE);
+}
+
+module.exports = { init, loadSecret, saveUsers, putFile, getFile, delFile, loadSettings, saveSettings, usingMongo: () => !!colUsers };

@@ -13,6 +13,8 @@ services:
         value: "20"
       - key: MONGODB_URI       # dán chuỗi kết nối MongoDB Atlas vào phần Environment của Render
         sync: false
+      - key: ADMIN_USERS       # tên tài khoản chủ (quản trị), nhiều tên cách nhau dấu phẩy
+        sync: false
       - key: TURN_URLS         # (tuỳ chọn) máy chủ TURN, vd: turn:global.relay.metered.ca:80,turns:global.relay.metered.ca:443
         sync: false
       - key: TURN_USERNAME

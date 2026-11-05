@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#1a040c">
+<link rel="icon" href="/icons/favicon-32.png" sizes="32x32" type="image/png">
+<title>Quản trị · XemChuaVN</title>
+<style>
+  :root { --bg: #0c0507; --card: #160a0f; --line: #2c1620; --text: #f3e9ec; --muted: #a8919a; --accent: #ff2a3d; --accent2: #9b30ff; --ok: #3ad29f; --warn: #ffb020; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, "Segoe UI", Roboto, sans-serif; background: radial-gradient(1200px 600px at 10% -10%, #2a0714 0, transparent 60%), radial-gradient(900px 500px at 110% 0, #1d0830 0, transparent 60%), var(--bg); color: var(--text); min-height: 100vh; }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: rgba(12,5,7,.85); backdrop-filter: blur(10px); z-index: 5; flex-wrap: wrap; }
+  header img { width: 34px; height: 34px; border-radius: 22%; }
+  header h1 { font-size: 18px; margin: 0; }
+  header .who { margin-left: auto; color: var(--muted); font-size: 13px; }
+  nav { display: flex; gap: 6px; padding: 12px 20px 0; flex-wrap: wrap; }
+  nav button { background: transparent; border: 1px solid var(--line); color: var(--muted); padding: 8px 14px; border-radius: 999px; cursor: pointer; font: inherit; }
+  nav button.on { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; border-color: transparent; font-weight: 600; }
+  main { padding: 16px 20px 60px; max-width: 1200px; margin: 0 auto; }
+  .tab { display: none; } .tab.on { display: block; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+  .card h2 { margin: 0 0 12px; font-size: 16px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  .stat b { display: block; font-size: 26px; } .stat span { color: var(--muted); font-size: 12.5px; }
+  input, select, textarea { background: #0e0609; border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 8px 10px; font: inherit; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  button.b { background: #241119; border: 1px solid var(--line); color: var(--text); padding: 7px 12px; border-radius: 10px; cursor: pointer; font: inherit; white-space: nowrap; }
+  button.b:hover { border-color: #4a2633; }
+  button.p { background: linear-gradient(135deg, var(--accent), var(--accent2)); border: 0; color: #fff; font-weight: 600; }
+  button.d { background: #3a0b14; border-color: #6b1424; color: #ffb3bd; }
+  button.g { background: #0d2a20; border-color: #1c5a44; color: #9ff0cf; }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { color: var(--muted); font-weight: 500; font-size: 12.5px; }
+  tr.click { cursor: pointer; } tr.click:hover td { background: rgba(255,255,255,.025); }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; margin-right: 4px; }
+  .t-on { background: #0d2a20; color: #7deabf; } .t-ban { background: #3a0b14; color: #ff9aa7; } .t-owner { background: #3a2a08; color: #ffd36b; } .t-admin { background: #22103a; color: #c9a2ff; }
+  .muted { color: var(--muted); } .small { font-size: 12.5px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+  .opt { border: 2px solid var(--line); border-radius: 12px; padding: 12px; cursor: pointer; background: #10070b; }
+  .opt.on { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,42,61,.15); }
+  .opt b { display: block; margin-bottom: 2px; }
+  .sw { display: flex; gap: 6px; margin-top: 8px; } .sw i { width: 26px; height: 26px; border-radius: 8px; display: block; }
+  .log li { padding: 5px 0; border-bottom: 1px dashed var(--line); } .log { list-style: none; padding: 0; margin: 0; max-height: 360px; overflow: auto; }
+  dialog { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 16px; padding: 18px; width: min(560px, 94vw); }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  dialog h3 { margin: 0 0 10px; }
+  .kv { display: grid; grid-template-columns: 130px 1fr; gap: 6px 10px; margin-bottom: 12px; font-size: 13.5px; } .kv div:nth-child(odd) { color: var(--muted); }
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #241119; border: 1px solid var(--line); padding: 10px 16px; border-radius: 12px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 50; }
+  #toast.show { opacity: 1; }
+  .center { text-align: center; padding: 60px 20px; } .hidden { display: none !important; }
+  a { color: #ff8a97; }
+  @media (max-width: 700px) { .hide-sm { display: none; } main { padding: 12px; } th, td { padding: 8px 4px; } }
+</style>
+</head>
+<body>
+<header>
+  <img src="/icons/icon-192.png" alt="">
+  <h1>Quản trị XemChuaVN</h1>
+  <a href="/" style="font-size:13px">← Về rạp</a>
+  <div class="who" id="who"></div>
+</header>
+<div id="gate" class="center hidden"></div>
+<div id="app" style="display:none">
+<nav>
+  <button data-t="ov" class="on">Tổng quan</button>
+  <button data-t="users">Tài khoản</button>
+  <button data-t="rooms">Phòng</button>
+  <button data-t="look">Giao diện rạp</button>
+  <button data-t="ips">IP bị chặn</button>
+</nav>
+<main>
+  <!-- Tổng quan -->
+  <section class="tab on" id="t-ov">
+    <div class="stats" id="stats"></div>
+    <div class="card">
+      <h2>📢 Thông báo toàn server</h2>
+      <div class="row"><input id="annText" maxlength="200" placeholder="VD: 21h tối nay chiếu phim mới, mọi người vào rạp nhé!" style="flex:1;min-width:220px"><button class="b p" id="annSend">Gửi</button></div>
+      <div class="small muted" style="margin-top:6px">Hiện thành dòng thông báo cho mọi người đang online + ghi vào khung chat các phòng.</div>
+    </div>
+    <div class="card"><h2>Nhật ký quản trị</h2><ul class="log" id="log"></ul></div>
+  </section>
+
+  <!-- Tài khoản -->
+  <section class="tab" id="t-users">
+    <div class="card">
+      <div class="row" style="margin-bottom:10px">
+        <input id="uq" placeholder="Tìm tên hoặc IP…" style="flex:1;min-width:180px">
+        <select id="uf"><option value="all">Tất cả</option><option value="online">Đang online</option><option value="banned">Đang bị khoá</option><option value="new">Mới tạo 24h</option><option value="admin">Quản trị</option></select>
+        <button class="b" id="ur">Làm mới</button>
+      </div>
+      <div class="small muted" id="ucount"></div>
+      <div style="overflow-x:auto"><table><thead><tr><th>Tài khoản</th><th>Trạng thái</th><th class="hide-sm">Lần cuối</th><th class="hide-sm">IP gần nhất</th><th class="hide-sm">Tạo lúc</th></tr></thead><tbody id="ulist"></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- Phòng -->
+  <section class="tab" id="t-rooms">
+    <div class="row" style="margin-bottom:10px"><button class="b" id="rr">Làm mới</button></div>
+    <div id="rlist"></div>
+  </section>
+
+  <!-- Giao diện -->
+  <section class="tab" id="t-look">
+    <div class="card">
+      <h2>Tên rạp công cộng</h2>
+      <div class="row"><input id="mainName" maxlength="30" style="flex:1;min-width:200px"><button class="b p" id="saveName">Lưu tên</button></div>
+    </div>
+    <div class="card">
+      <h2>Bố cục rạp công cộng</h2>
+      <div class="small muted" style="margin-bottom:10px">Đổi xong mọi người trong rạp công cộng sẽ tự tải lại trang để vào cảnh mới (video, hàng chờ, chat vẫn giữ). Bố cục mới thêm vào code sẽ tự hiện ở đây.</div>
+      <div class="grid2" id="tplList"></div>
+    </div>
+    <div class="card">
+      <h2>Màu rạp lớn</h2>
+      <div class="small muted" style="margin-bottom:10px">Áp dụng cho mọi phòng dùng bố cục "Rạp lớn" (rạp công cộng + phòng riêng loại Rạp lớn). Người đang xem sẽ tự tải lại.</div>
+      <div class="grid2" id="themeList"></div>
+    </div>
+  </section>
+
+  <!-- IP -->
+  <section class="tab" id="t-ips">
+    <div class="card">
+      <h2>IP bị chặn</h2>
+      <div class="small muted" style="margin-bottom:10px">IP bị chặn không đăng nhập / đăng ký được (trừ quản trị). Lưu ý: mạng 4G nhiều người dùng chung IP, chặn nhầm có thể ảnh hưởng người khác.</div>
+      <table><thead><tr><th>IP</th><th>Tài khoản</th><th class="hide-sm">Lý do</th><th class="hide-sm">Bởi</th><th></th></tr></thead><tbody id="iplist"></tbody></table>
+    </div>
+  </section>
+</main>
+</div>
+
+<dialog id="dlg"></dialog>
+<div id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const token = localStorage.getItem('rc_token');
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ago = (t) => { if (!t) return '—'; const s = (Date.now() - t) / 1000; if (s < 60) return 'vừa xong'; if (s < 3600) return Math.floor(s / 60) + ' phút trước'; if (s < 86400) return Math.floor(s / 3600) + ' giờ trước'; return Math.floor(s / 86400) + ' ngày trước'; };
+const dt = (t) => (t ? new Date(t).toLocaleString('vi-VN', { hour12: false }) : '—');
+let toastT; const toast = (m) => { $('toast').textContent = m; $('toast').classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => $('toast').classList.remove('show'), 2600); };
+async function api(url, body) {
+  const r = await fetch('/api/admin' + url, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(j.error || 'Có lỗi xảy ra'); e.status = r.status; throw e; }
+  return j;
+}
+const act = async (url, body, okMsg) => { try { await api(url, body); toast(okMsg || 'Đã xong'); return true; } catch (e) { toast(e.message); return false; } };
+let ME = null;
+
+// ---- tab
+document.querySelectorAll('nav button').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach((x) => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.id === 't-' + b.dataset.t));
+  ({ ov: loadOverview, users: loadUsers, rooms: loadRooms, look: loadLook, ips: loadIps })[b.dataset.t]();
+});
+
+// ---- Tổng quan
+async function loadOverview() {
+  const o = await api('/overview');
+  const st = [['Tài khoản', o.users], ['Đang online', o.online], ['Hoạt động 24h', o.active24h], ['Mới tạo 24h', o.new24h], ['Đang bị khoá', o.banned], ['Phòng đang mở', o.rooms], ['IP bị chặn', o.ipBans]];
+  $('stats').innerHTML = st.map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('');
+  $('log').innerHTML = o.log.length ? o.log.map((l) => `<li><span class="muted small">${dt(l.t)}</span> · <b>${esc(l.by)}</b>: ${esc(l.what)}</li>`).join('') : '<li class="muted">Chưa có thao tác nào</li>';
+}
+$('annSend').onclick = async () => { const text = $('annText').value.trim(); if (!text) return; if (await act('/announce', { text }, 'Đã gửi thông báo')) { $('annText').value = ''; loadOverview(); } };
+
+// ---- Tài khoản
+const tags = (u) => (u.role === 'owner' ? '<span class="tag t-owner">CHỦ</span>' : u.role === 'admin' ? '<span class="tag t-admin">ADMIN</span>' : '') + (u.ban ? '<span class="tag t-ban">KHOÁ</span>' : '') + (u.online ? '<span class="tag t-on">ONLINE</span>' : '');
+let uTimer;
+async function loadUsers() {
+  const r = await api('/users?q=' + encodeURIComponent($('uq').value.trim()) + '&filter=' + $('uf').value);
+  $('ucount').textContent = r.total + ' tài khoản' + (r.total > r.list.length ? ` (hiện ${r.list.length})` : '');
+  $('ulist').innerHTML = r.list.map((u) => `<tr class="click" data-u="${esc(u.username)}">
+    <td><b>${esc(u.username)}</b> ${u.gender === 'f' ? '<span class="muted">♀</span>' : u.gender === 'm' ? '<span class="muted">♂</span>' : ''}</td>
+    <td>${tags(u) || '<span class="muted small">offline</span>'}${u.room ? `<span class="small muted"> · ${esc(u.room)}</span>` : ''}</td>
+    <td class="hide-sm">${u.online ? 'đang online' : ago(u.lastSeen)}</td><td class="hide-sm small">${esc(u.lastIp || '—')}</td><td class="hide-sm small">${dt(u.createdAt)}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Không có ai</td></tr>';
+  $('ulist').querySelectorAll('tr.click').forEach((tr) => tr.onclick = () => openUser(tr.dataset.u));
+}
+$('uq').oninput = () => { clearTimeout(uTimer); uTimer = setTimeout(loadUsers, 250); };
+$('uf').onchange = loadUsers; $('ur').onclick = loadUsers;
+
+async function openUser(name) {
+  let u; try { u = await api('/user/' + encodeURIComponent(name)); } catch (e) { return toast(e.message); }
+  const d = $('dlg'), self = ME && ME.username.toLowerCase() === u.username.toLowerCase();
+  const protectedU = self || u.role === 'owner' || (u.role === 'admin' && !ME.owner);
+  d.innerHTML = `<h3>${esc(u.username)} ${tags(u)}</h3>
+    <div class="kv">
+      <div>Tạo lúc</div><div>${dt(u.createdAt)}</div>
+      <div>Lần cuối online</div><div>${u.online ? 'đang online' + (u.room ? ' · phòng ' + esc(u.room) : '') : dt(u.lastSeen)}</div>
+      <div>IP đăng ký</div><div>${esc(u.regIp || '—')}</div>
+      <div>IP gần đây</div><div>${u.ips.length ? u.ips.map((ip) => esc(ip) + (u.ipBanned.includes(ip) ? ' <span class="tag t-ban">CHẶN</span>' : '')).join('<br>') : '—'}</div>
+      <div>Acc chung IP</div><div>${u.sameIp.length ? u.sameIp.map((n) => `<a href="#" data-open="${esc(n)}">${esc(n)}</a>`).join(', ') : '<span class="muted">không có</span>'}</div>
+      ${u.ban ? `<div>Đang bị khoá</div><div style="color:#ff9aa7">${u.ban.until ? 'đến ' + dt(u.ban.until) : 'vĩnh viễn'}${u.ban.reason ? ' · ' + esc(u.ban.reason) : ''}<br><span class="muted small">bởi ${esc(u.ban.by)} lúc ${dt(u.ban.at)}</span></div>` : ''}
+    </div>
+    ${protectedU ? `<div class="muted small" style="margin-bottom:12px">${self ? 'Đây là tài khoản của bạn.' : 'Bạn không có quyền xử lý tài khoản này.'}</div>` : u.ban ? '' : `
+    <div class="card" style="padding:12px">
+      <div class="row" style="margin-bottom:8px">
+        <select id="bMin"><option value="60">Khoá 1 giờ</option><option value="1440">Khoá 1 ngày</option><option value="10080">Khoá 7 ngày</option><option value="43200">Khoá 30 ngày</option><option value="0" selected>Khoá vĩnh viễn</option></select>
+        <input id="bReason" maxlength="120" placeholder="Lý do (người bị khoá sẽ thấy)" style="flex:1;min-width:160px">
+      </div>
+      <label class="small"><input type="checkbox" id="bIp"> Chặn luôn IP gần nhất (${esc(u.lastIp || 'chưa có')}) để không tạo acc mới được</label>
+    </div>`}
+    <div class="row" style="justify-content:flex-end">
+      ${!protectedU && u.online ? '<button class="b" id="dKick">Đá khỏi rạp</button>' : ''}
+      ${ME.owner && u.role !== 'owner' && !self ? `<button class="b" id="dRole">${u.role === 'admin' ? 'Gỡ quyền admin' : 'Cấp quyền admin'}</button>` : ''}
+      ${u.ban ? (protectedU ? '' : '<button class="b g" id="dUnban">Mở khoá</button>') : (protectedU ? '' : '<button class="b d" id="dBan">Khoá tài khoản</button>')}
+      <button class="b" id="dClose">Đóng</button>
+    </div>`;
+  const done = () => { d.close(); loadUsers(); };
+  d.querySelectorAll('[data-open]').forEach((a) => a.onclick = (e) => { e.preventDefault(); openUser(a.dataset.open); });
+  $('dClose').onclick = () => d.close();
+  if ($('dBan')) $('dBan').onclick = async () => {
+    if (!confirm(`Khoá tài khoản ${u.username}?`)) return;
+    if (await act('/ban', { username: u.username, minutes: +$('bMin').value, reason: $('bReason').value, ip: $('bIp').checked }, 'Đã khoá ' + u.username)) done();
+  };
+  if ($('dUnban')) $('dUnban').onclick = async () => { if (await act('/unban', { username: u.username }, 'Đã mở khoá')) done(); };
+  if ($('dKick')) $('dKick').onclick = async () => { if (await act('/kick', { username: u.username }, 'Đã đá ' + u.username)) done(); };
+  if ($('dRole')) $('dRole').onclick = async () => {
+    const make = u.role !== 'admin';
+    if (!confirm(make ? `Cấp quyền admin cho ${u.username}? Admin khoá / đá được người thường và đổi giao diện rạp.` : `Gỡ quyền admin của ${u.username}?`)) return;
+    if (await act('/role', { username: u.username, admin: make }, make ? 'Đã cấp quyền admin' : 'Đã gỡ quyền admin')) done();
+  };
+  if (!d.open) d.showModal();
+}
+
+// ---- Phòng
+async function loadRooms() {
+  const list = await api('/rooms');
+  $('rlist').innerHTML = list.map((r) => `<div class="card">
+    <div class="row" style="justify-content:space-between">
+      <div><b>${esc(r.name)}</b> <span class="muted small">${r.type === 'public' ? 'Rạp công cộng' : 'Phòng riêng · mã ' + esc(r.id) + (r.owner ? ' · chủ phòng ' + esc(r.owner) : '')}${r.locked ? ' · 🔒' : ''}</span></div>
+      <div class="row">
+        ${r.current ? `<button class="b" data-skip="${esc(r.id)}">Bỏ qua video</button>` : ''}
+        ${r.queue || r.current ? `<button class="b" data-clear="${esc(r.id)}">Xoá danh sách phát</button>` : ''}
+        ${r.type !== 'public' ? `<button class="b d" data-close="${esc(r.id)}">Đóng phòng</button>` : ''}
+      </div>
+    </div>
+    <div class="small" style="margin-top:6px">${r.current ? '▶ ' + esc(r.current.title) + (r.current.by ? ' <span class="muted">· ' + esc(r.current.by) + '</span>' : '') : '<span class="muted">Chưa phát video</span>'}${r.queue ? ` <span class="muted">· ${r.queue} video chờ</span>` : ''}</div>
+    <div class="small muted" style="margin-top:6px">${r.users.length} người: ${r.users.length ? r.users.map((n) => `<a href="#" data-open="${esc(n)}">${esc(n)}</a>`).join(', ') : '—'}</div>
+  </div>`).join('');
+  $('rlist').querySelectorAll('[data-open]').forEach((a) => a.onclick = (e) => { e.preventDefault(); openUser(a.dataset.open); });
+  $('rlist').querySelectorAll('[data-skip]').forEach((b) => b.onclick = async () => { if (await act('/room/skip', { id: b.dataset.skip }, 'Đã bỏ qua video')) loadRooms(); });
+  $('rlist').querySelectorAll('[data-clear]').forEach((b) => b.onclick = async () => { if (confirm('Xoá hết video đang phát và hàng chờ?') && await act('/room/clear', { id: b.dataset.clear }, 'Đã xoá danh sách phát')) loadRooms(); });
+  $('rlist').querySelectorAll('[data-close]').forEach((b) => b.onclick = async () => { if (confirm('Đóng phòng này? Mọi người trong phòng sẽ về rạp công cộng.') && await act('/room/close', { id: b.dataset.close }, 'Đã đóng phòng')) loadRooms(); });
+}
+$('rr').onclick = loadRooms;
+
+// ---- Giao diện rạp
+const SW = { demon: ['#ff2a3d', '#9b30ff', '#120709'], mystic: ['#3fe6d0', '#b98cff', '#0c0f19'], gold: ['#e8b45e', '#b3262e', '#18181b'] };
+async function loadLook() {
+  const s = await api('/settings');
+  $('mainName').value = s.mainName;
+  $('tplList').innerHTML = s.templates.map((t) => `<div class="opt ${t.id === s.mainTpl ? 'on' : ''}" data-tpl="${esc(t.id)}"><b>${esc(t.name)}</b><span class="small muted">${t.seats} ghế${t.id === s.mainTpl ? ' · đang dùng' : ''}</span></div>`).join('');
+  $('themeList').innerHTML = s.themes.map((t) => `<div class="opt ${t.id === s.cinemaTheme ? 'on' : ''}" data-theme="${esc(t.id)}"><b>${esc(t.name)}</b><span class="small muted">${t.id === s.cinemaTheme ? 'đang dùng' : 'bấm để dùng'}</span><div class="sw">${(SW[t.id] || []).map((c) => `<i style="background:${c}"></i>`).join('')}</div></div>`).join('');
+  $('tplList').querySelectorAll('[data-tpl]').forEach((o) => o.onclick = async () => {
+    if (o.classList.contains('on')) return;
+    if (!confirm(`Đổi rạp công cộng sang "${o.querySelector('b').textContent}"? Người đang trong rạp sẽ tự tải lại trang.`)) return;
+    if (await act('/settings', { mainTpl: o.dataset.tpl }, 'Đã đổi bố cục')) loadLook();
+  });
+  $('themeList').querySelectorAll('[data-theme]').forEach((o) => o.onclick = async () => {
+    if (o.classList.contains('on')) return;
+    if (await act('/settings', { cinemaTheme: o.dataset.theme }, 'Đã đổi màu rạp')) loadLook();
+  });
+}
+$('saveName').onclick = () => act('/settings', { mainName: $('mainName').value }, 'Đã lưu tên rạp');
+
+// ---- IP
+async function loadIps() {
+  const list = await api('/ipbans');
+  $('iplist').innerHTML = list.map((b) => `<tr><td>${esc(b.ip)}</td><td>${esc(b.user || '—')}</td><td class="hide-sm">${esc(b.reason || '')}</td><td class="hide-sm small">${esc(b.by)} · ${dt(b.at)}</td><td><button class="b" data-ip="${esc(b.ip)}">Gỡ chặn</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Chưa chặn IP nào</td></tr>';
+  $('iplist').querySelectorAll('[data-ip]').forEach((b) => b.onclick = async () => { if (await act('/ipunban', { ip: b.dataset.ip }, 'Đã gỡ chặn')) loadIps(); });
+}
+
+// ---- vào trang
+(async () => {
+  const gate = (html) => { $('gate').innerHTML = html; $('gate').classList.remove('hidden'); };
+  if (!token) return gate('<h2>Bạn chưa đăng nhập</h2><p class="muted">Đăng nhập ở trang rạp trước, rồi quay lại đây.</p><p><a href="/">Đi tới trang đăng nhập →</a></p>');
+  try { ME = await api('/me'); }
+  catch (e) { return gate(`<h2>${e.status === 403 ? 'Không có quyền' : 'Chưa đăng nhập'}</h2><p class="muted">${esc(e.message)}</p><p><a href="/">← Về rạp</a></p>`); }
+  $('who').innerHTML = `${esc(ME.username)} <span class="tag ${ME.owner ? 't-owner' : 't-admin'}">${ME.owner ? 'CHỦ' : 'ADMIN'}</span>`;
+  $('app').style.display = '';
+  loadOverview().catch((e) => toast(e.message));
+})();
+</script>
+</body>
+</html>

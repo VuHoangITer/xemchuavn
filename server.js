@@ -18,11 +18,13 @@ const PORT = process.env.PORT || 3000;
 const SEATS = 152;
 // Loại phòng: số ghế, số chỗ nhảy, số người tối đa (phải khớp ROOM_TEMPLATES ở public/app.js)
 const TEMPLATES = {
-  cinema:  { seats: 152, dance: 5, cap: 0 },     // cap 0 = theo giới hạn chung
-  mini30:  { seats: 30,  dance: 0, cap: 30 },
-  room10:  { seats: 10,  dance: 0, cap: 10 },
-  couple2: { seats: 2,   dance: 0, cap: 2 },
+  cinema:  { name: 'Rạp lớn 152 chỗ',     seats: 152, dance: 5, cap: 0 },     // cap 0 = theo giới hạn chung
+  mini30:  { name: 'Phòng chiếu 30 chỗ',  seats: 30,  dance: 0, cap: 30 },
+  room10:  { name: 'Phòng VIP 10 chỗ',    seats: 10,  dance: 0, cap: 10 },
+  couple2: { name: 'Phòng đôi',           seats: 2,   dance: 0, cap: 2 },
 };
+// Bảng màu cho rạp lớn (phải khớp CINEMA_THEMES ở public/app.js) — đổi trong trang quản trị
+const CINEMA_THEMES = { demon: 'Ác quỷ đỏ tím', mystic: 'Huyền bí xanh ngọc', gold: 'Cổ điển vàng son' };
 const DANCE = 5;                // 5 chỗ nhảy trên bục: chỉ số 152..156 (không xếp ngẫu nhiên vào đây)
 const PARTY_RATIO = 1 / 3;      // đủ 1/3 người trong phòng vote thì bật đèn bar
 const MENU_IDS = new Set(['popcorn', 'popcorn_cheese', 'hotdog', 'fries', 'nachos', 'soda', 'milktea', 'juice', 'coffee', 'water']);   // 4 khu: ghế thường, ghế da, ghế đôi, giường nằm (bố cục ở public/app.js)
@@ -56,15 +58,31 @@ app.get('/api/ice', (req, res) => {
   if (process.env.TURN_URLS) ice.push({ urls: process.env.TURN_URLS.split(',').map((x) => x.trim()).filter(Boolean), username: process.env.TURN_USERNAME || '', credential: process.env.TURN_CREDENTIAL || '' });
   res.json({ iceServers: ice });
 });
+// cấu hình giao diện cho trình duyệt (đọc lúc tải trang)
+app.get('/api/config', (req, res) => {
+  const st = auth.settings(), main = rooms.get('main');
+  res.set('Cache-Control', 'no-store').json({ mainTpl: main ? main.tpl : 'cinema', cinemaTheme: CINEMA_THEMES[st.cinemaTheme] ? st.cinemaTheme : 'demon' });
+});
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 app.use('/api', auth.router);
 app.use('/vendor/three', express.static(path.join(__dirname, 'node_modules', 'three')));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// IP người dùng giống cách Express tính req.ip (sau proxy lấy địa chỉ cuối trong X-Forwarded-For)
+function clientIp(socket) {
+  const xff = String(socket.handshake.headers['x-forwarded-for'] || '').split(',').map((x) => x.trim()).filter(Boolean);
+  return (app.get('trust proxy') && xff.length ? xff[xff.length - 1] : socket.handshake.address) || '';
+}
 // Chỉ cho socket đã đăng nhập
 io.use((socket, next) => {
   const name = auth.verify(socket.handshake.auth && socket.handshake.auth.token);
   if (!name) return next(new Error('unauthorized'));
+  const u = auth.users()[auth.keyOf(name)], ip = clientIp(socket);
+  if (auth.banOf(u)) return next(new Error('banned'));
+  if (auth.ipBanOf(ip) && !auth.isAdmin(name)) return next(new Error('banned'));
   socket.data.username = name;
+  socket.data.ip = ip;
+  auth.touch(name, ip);
   next();
 });
 
@@ -97,6 +115,19 @@ function makeRoom(id, type, extra = {}) {
 }
 
 rooms.set('main', makeRoom('main', 'public', { name: 'Rạp công cộng' }));
+
+// Đổi bố cục rạp công cộng (trang quản trị): dựng lại phòng, giữ video / hàng chờ / chat; mọi người tải lại trang để vào cảnh mới
+function setMainRoom(tpl, name) {
+  const old = rooms.get('main');
+  const nr = makeRoom('main', 'public', { name: name || old.name, tpl });
+  for (const k of ['queue', 'current', 'startedAt', 'paused', 'pausedAt', 'token', 'chat']) nr[k] = old[k];
+  if (old.tpl !== nr.tpl) {
+    io.to('main').emit('server:reload', { what: 'layout', message: 'Quản trị viên vừa đổi bố cục rạp, đang tải lại…' });
+    for (const sid of old.users.keys()) { const s = io.sockets.sockets.get(sid); if (s) { s.leave('main'); s.data.room = null; } }
+  } else { nr.users = old.users; nr.seats = old.seats; nr.votes = old.votes; nr.party = old.party; }
+  clearTimeout(old.bt);
+  rooms.set('main', nr);
+}
 
 function position(room) {
   if (!room.current) return 0;
@@ -562,5 +593,12 @@ setInterval(() => {
 }, SYNC_INTERVAL_MS);
 
 // chờ nạp xong dữ liệu (file / MongoDB) rồi mới mở cổng
-auth.ready.then(() => server.listen(PORT, () => console.log(`XEMCHUAVN chạy tại http://localhost:${PORT}`)))
+// trang quản trị
+app.use('/api/admin', require('./admin')({ io, rooms, auth, TEMPLATES, CINEMA_THEMES, leaveRoom, startNext, sysMsg, setMainRoom }));
+app.use('/api', (req, res) => res.status(404).json({ error: 'Không có API này' }));
+
+auth.ready.then(() => {                                       // áp cài đặt đã lưu cho rạp công cộng
+  const st = auth.settings();
+  if ((st.mainTpl && TEMPLATES[st.mainTpl] && st.mainTpl !== 'cinema') || st.mainName) setMainRoom(TEMPLATES[st.mainTpl] ? st.mainTpl : 'cinema', st.mainName);
+}).then(() => server.listen(PORT, () => console.log(`XEMCHUAVN chạy tại http://localhost:${PORT}`)))
   .catch((e) => { console.error('Không kết nối được nơi lưu dữ liệu:', e.message); process.exit(1); });

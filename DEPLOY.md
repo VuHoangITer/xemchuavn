@@ -73,6 +73,22 @@ Không có TURN, người dùng mạng 4G hoặc mạng công ty đôi khi khôn
    - `TURN_USERNAME`, `TURN_CREDENTIAL` = thông tin vừa lấy
 3. **Save Changes** → Render tự khởi động lại.
 
+## Bước 6 — Bật trang quản trị
+
+1. Render → service `xemchuavn` → **Environment** → **Add Environment Variable**:
+   - Key: `ADMIN_USERS`
+   - Value: tên tài khoản của bạn trên web (nhiều người thì cách nhau dấu phẩy, vd `Hoang,BanCuaHoang`)
+2. **Save Changes** → đợi Render khởi động lại.
+3. Đăng nhập web bằng tài khoản đó → bấm ảnh đại diện góc phải → **🛡️ Trang quản trị** (hoặc vào thẳng `https://xemchuavn.onrender.com/admin`).
+
+Trong trang quản trị:
+- **Tài khoản**: tìm theo tên / IP, xem lần cuối online, các acc dùng chung IP (dễ bắt acc clone), **khoá** (1 giờ → vĩnh viễn, ghi lý do, chặn luôn IP), **mở khoá**, **đá khỏi rạp**, **cấp quyền admin** cho người khác (chỉ chủ làm được).
+- **Phòng**: xem ai đang ở phòng nào, bỏ qua video, xoá danh sách phát, đóng phòng riêng.
+- **Giao diện rạp**: đổi tên, bố cục và màu của rạp công cộng, người đang xem tự tải lại.
+- **Tổng quan**: số liệu, gửi thông báo cho mọi người, nhật ký ai đã làm gì.
+
+Chạy ở máy thì đặt biến trước khi chạy: PowerShell `$env:ADMIN_USERS="TenCuaBan"; node server.js`.
+
 ---
 
 ## Cập nhật web sau này

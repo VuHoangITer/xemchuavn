@@ -16,12 +16,30 @@ const TOKEN_TTL = 30 * 24 * 3600 * 1000;
 // ---------- Tài khoản (giữ trong bộ nhớ, ghi xuống file / database khi đổi) + khoá ký token ----------
 let users = {}; // key: username viết thường -> { username, hash, createdAt, ... }
 let SECRET = '';
-const ready = (async () => { users = await store.init(); SECRET = await store.loadSecret(); })();
+let settings = {};  // cài đặt từ trang quản trị: { admins: [], ipBans: [], mainTpl, cinemaTheme, mainName }
+const ready = (async () => { users = await store.init(); SECRET = await store.loadSecret(); settings = await store.loadSettings(); })();
+const saveSettings = () => store.saveSettings(settings);
 const saveUsers = () => store.saveUsers(users);
 
 // chuẩn hoá tên: dạng Unicode NFC (bộ gõ khác nhau ra cùng 1 chữ), bỏ khoảng trắng đầu/cuối, nhiều dấu cách → 1 dấu cách
 const cleanName = (name) => String(name || '').normalize('NFC').trim().replace(/\s+/g, ' ');
 const keyOf = (name) => cleanName(name).toLocaleLowerCase('vi');   // so khớp không phân biệt hoa / thường
+
+// ---------- Quản trị: chủ (biến môi trường ADMIN_USERS) + admin do chủ thêm; khoá tài khoản / IP ----------
+const OWNERS = new Set(String(process.env.ADMIN_USERS || '').split(',').map((x) => keyOf(x)).filter(Boolean));
+const isOwner = (name) => OWNERS.has(keyOf(name));
+const isAdmin = (name) => isOwner(name) || (settings.admins || []).includes(keyOf(name));
+const banOf = (u) => (u && u.ban && (!u.ban.until || u.ban.until > Date.now()) ? u.ban : null);
+const ipBanOf = (ip) => (ip ? (settings.ipBans || []).find((b) => b.ip === ip) || null : null);
+const fmtUntil = (t) => (t ? 'đến ' + new Date(t).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false }) : 'vĩnh viễn');
+const banMsg = (b) => `Tài khoản đã bị khoá ${fmtUntil(b.until)}${b.reason ? ' · Lý do: ' + b.reason : ''}`;
+// ghi lại lần hoạt động gần nhất + IP (để quản trị phát hiện acc clone / hack); chỉ lưu xuống khi đổi IP hoặc sau 10 phút
+function touch(name, ip) {
+  const u = users[keyOf(name)]; if (!u) return;
+  const now = Date.now(), changed = ip && u.lastIp !== ip;
+  if (changed) { u.ips = [ip, ...(u.ips || []).filter((x) => x !== ip)].slice(0, 5); u.lastIp = ip; }
+  if (changed || now - (u.lastSeen || 0) > 600_000) { u.lastSeen = now; saveUsers(); }
+}
 
 // ---------- Token ----------
 const b64u = (s) => Buffer.from(s).toString('base64url');
@@ -71,6 +89,7 @@ const USERNAME_RE = /^(?=.{3,16}$)[\p{L}\p{N}_.-]+(?: [\p{L}\p{N}_.-]+)*$/u;   /
 const DUMMY_HASH = bcrypt.hashSync('dummy-password', 10);
 const router = express.Router();
 const userOf = (req) => { const n = verify((req.get('authorization') || '').replace(/^Bearer\s+/i, '')); return n ? users[keyOf(n)] : null; };
+const ipBlocked = (req, res) => { const b = ipBanOf(req.ip); if (b) res.status(403).json({ error: 'Mạng (IP) của bạn đã bị chặn' + (b.reason ? ' · Lý do: ' + b.reason : ''), banned: true }); return !!b; };
 const avatarKey = (u) => keyOf(u.username), bgKey = (u) => 'bg:' + keyOf(u.username);
 
 // ---------- Hồ sơ: ảnh đại diện (đặt trước json 2kb vì ảnh lớn hơn) ----------
@@ -139,6 +158,7 @@ router.get('/profilebg/:name', async (req, res) => {
 router.use(express.json({ limit: '16kb' }));   // bộ đồ + màu sơn có thể dài hơn 2kb
 
 router.post('/register', async (req, res) => {
+  if (ipBlocked(req, res)) return;
   if (limited('reg:' + req.ip, REG_LIMIT, 3600_000)) return res.status(429).json({ error: 'Đăng ký quá nhiều lần, thử lại sau' });
   const username = cleanName(req.body && req.body.username);
   const password = String((req.body && req.body.password) || '');
@@ -147,7 +167,7 @@ router.post('/register', async (req, res) => {
   if (users[keyOf(username)]) return res.status(409).json({ error: 'Tên đăng nhập đã có người dùng' });
   const hash = await bcrypt.hash(password, 10);
   if (users[keyOf(username)]) return res.status(409).json({ error: 'Tên đăng nhập đã có người dùng' });
-  users[keyOf(username)] = { username, hash, createdAt: Date.now() };
+  users[keyOf(username)] = { username, hash, createdAt: Date.now(), regIp: req.ip, lastIp: req.ip, ips: [req.ip], lastSeen: Date.now() };
   await saveUsers();
   res.json({ token: sign(username), username });
 });
@@ -158,14 +178,19 @@ router.post('/login', async (req, res) => {
   const u = users[keyOf(req.body && req.body.username)];
   const ok = await bcrypt.compare(password, u ? u.hash : DUMMY_HASH);
   if (!u || !ok) return res.status(401).json({ error: 'Sai tên đăng nhập hoặc mật khẩu' });
+  const b = banOf(u); if (b) return res.status(403).json({ error: banMsg(b), banned: true });
+  if (!isAdmin(u.username) && ipBlocked(req, res)) return;
+  touch(u.username, req.ip);
   res.json({ token: sign(u.username), username: u.username });
 });
 
 router.get('/me', (req, res) => {
   const u = userOf(req);
   if (!u) return res.status(401).json({ error: 'Chưa đăng nhập' });
+  const b = banOf(u); if (b) return res.status(403).json({ error: banMsg(b), banned: true });
+  touch(u.username, req.ip);
   ensureFashion(u);
-  res.json({ username: u.username, createdAt: u.createdAt || null, avatarVer: u.avatarVer || 0, bg: u.bg || null, ...fashionOf(u) });
+  res.json({ username: u.username, createdAt: u.createdAt || null, avatarVer: u.avatarVer || 0, bg: u.bg || null, admin: isAdmin(u.username), ...fashionOf(u) });
 });
 
 // ---------- Thời trang: giới tính, màu da, đồ đã mua, đồ đang mặc ----------
@@ -259,4 +284,9 @@ function getProfile(name) {
   return { look: { gender: u.gender, skin: u.skin, equip: u.equip, paint: equippedPaint(u), pose: u.pose === 'dance' ? 'dance' : 'static' }, av: u.avatarVer || 0, bg: u.bg || null };
 }
 
-module.exports = { router, verify, getProfile, ready };
+module.exports = {
+  router, verify, getProfile, ready,
+  // cho trang quản trị (admin.js)
+  users: () => users, settings: () => settings, saveUsers, saveSettings, keyOf, cleanName,
+  isOwner, isAdmin, banOf, ipBanOf, banMsg, touch, userOf,
+};
