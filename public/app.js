@@ -1,6 +1,7 @@
 // XEMCHUAVN - client
 // Cảnh 3D (Three.js) + video YouTube gắn lên màn hình rạp (CSS3D) + nhân vật có tên/bong bóng chat + voice WebRTC
 import * as THREE from 'three';
+import { sfx, scratchSound, buildPanel } from '/dj.js';   // bàn DJ: âm thanh hiệu ứng tự tổng hợp + bảng điều khiển
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -374,12 +375,16 @@ const SEATS = SEAT_INFO.length;   // = 152 ghế thật
 const STAGE_Z0 = TPLC.stage ? TPLC.stage.z0 : 0, STAGE_Z1 = TPLC.stage ? TPLC.stage.z1 : 0, STAGE_H = TPLC.stage ? TPLC.stage.h : 0;
 const DANCE_N = TPLC.dance, DANCE_SPOTS = Array.from({ length: DANCE_N }, (_, k) => ({ x: (k - 2) * 4.2, z: -8.6 }));
 const DANCE_TYPE = { name: 'Sàn nhảy', dance: true };
-const isDance = (i) => i != null && i >= SEATS && i < SEATS + DANCE_N;
+// Bàn DJ: chỗ đứng đặc biệt ngay sau các chỗ nhảy (chỉ phòng có sân khấu), đứng sau bàn DJ giữa sân khấu, quay mặt xuống khán giả
+const DJ_IDX = DANCE_N > 0 && TPLC.stage ? SEATS + DANCE_N : -1;
+const DJ_SPOT = TPLC.stage ? { x: 0, z: TPLC.stage.z0 + 1.6 } : { x: 0, z: 0 };
+const isDJ = (i) => DJ_IDX >= 0 && i === DJ_IDX;
+const isDance = (i) => i != null && i >= SEATS && (i < SEATS + DANCE_N || i === DJ_IDX);   // đứng trên sân khấu (sàn nhảy hoặc bàn DJ)
 const isRealSeat = (i) => i != null && i >= 0 && i < SEATS;
-const seatName = (i) => (isDance(i) ? 'Sàn nhảy ' + (i - SEATS + 1) : SEAT_INFO[i].label);
+const seatName = (i) => (isDJ(i) ? 'Bàn DJ' : isDance(i) ? 'Sàn nhảy ' + (i - SEATS + 1) : SEAT_INFO[i].label);
 const seatRow = (i) => (isDance(i) ? -1 : SEAT_INFO[i].row);
 const seatType = (i) => (isDance(i) ? DANCE_TYPE : SEAT_TYPES[SEAT_INFO[i].type]);
-function seatPos(i) { if (isDance(i)) return DANCE_SPOTS[i - SEATS]; const s = SEAT_INFO[i]; return { x: s.x, z: s.z }; }
+function seatPos(i) { if (isDJ(i)) return DJ_SPOT; if (isDance(i)) return DANCE_SPOTS[i - SEATS]; const s = SEAT_INFO[i]; return { x: s.x, z: s.z }; }
 
 function mulberry32(a) {
   return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a);
@@ -960,8 +965,9 @@ function updateParty(t, dt) {
   }
 
   // 2) laser: đổi kiểu quét mỗi 2 ô nhịp (8 phách)
-  lasers.visible = showFx;
-  if (showFx) {
+  const djLas = !!djFx && performance.now() < djFx.laserUntil && camMode !== 'screen';   // DJ bấm Laser: bật laser dù chưa bật đèn bar
+  lasers.visible = showFx || djLas;
+  if (showFx || djLas) {
     const mode = Math.floor(beat / 8) % 3;
     laserBeams.forEach((L, i) => {
       const u = i / (LASER_N - 1) - 0.5;
@@ -973,8 +979,9 @@ function updateParty(t, dt) {
       if (_dir.z < 0.2) { _dir.z = 0.2; _dir.normalize(); }    // không bao giờ bắn về phía màn
       L.piv.quaternion.setFromUnitVectors(_down, _dir);
       L.glowMat.color.setHex(palette(i % 3));
-      L.glowMat.opacity = f * (0.18 + 0.22 * kick);
-      L.coreMat.opacity = f * (0.45 + 0.4 * kick);
+      const lf = djLas ? Math.max(f, 1) : f;                 // laser của DJ sáng hết cỡ
+      L.glowMat.opacity = lf * (0.18 + 0.22 * kick);
+      L.coreMat.opacity = lf * (0.45 + 0.4 * kick);
     });
   }
 
@@ -1512,6 +1519,7 @@ function routeToDance(p, seat) {
     if (Math.abs(p.x - pa) > 0.05) pts.push(V3(pa, p.z));
     pts.push(V3(pa, FRONT_Z));
   }
+  if (isDJ(seat)) { const sx = p.x < 0 ? -2.9 : 2.9; pts.push(V3(sx, FRONT_Z), V3(sx, sp.z), V3(sp.x, sp.z)); return pts; }   // DJ đi vòng cạnh bàn, không xuyên qua
   pts.push(V3(sp.x, FRONT_Z), V3(sp.x, sp.z));
   return pts;
 }
@@ -2345,7 +2353,8 @@ function updateAvatars(dt, t) {
     } else if (a.dancing) {                                   // nhảy theo combo điệu đã chọn (mỗi điệu 4 giây)
       const sp = seatPos(a.seat);
       setRide(a, false);
-      danceStep(a, a.dances[Math.floor(t / 4) % a.dances.length], t, Math.PI, floorY(sp.z));
+      if (isDJ(a.seat)) djStep(a, t, floorY(sp.z));             // DJ: tay trên đĩa, gật đầu theo nhịp
+      else danceStep(a, a.dances[Math.floor(t / 4) % a.dances.length], t, Math.PI, floorY(sp.z));
       updatePet(a, t, 'dance');
     } else {
       if (a.sitting) { let df = -g.rotation.y; df = Math.atan2(Math.sin(df), Math.cos(df)); g.rotation.y += df * Math.min(1, dt * 10); }
@@ -2624,7 +2633,7 @@ function setMyRecline(v) {
 // Chỉ khi đã có ghế mới hiện nút "góc nhìn từ ghế" + thanh ngả lưng; rạp đầy thì vẫn xem bằng các góc khác
 function updateSeatUI() {
   const seated = isRealSeat(mySeat);                           // đang nhảy thì không có góc nhìn ghế / ngả lưng / căn tin
-  $('dLeave').querySelector('.lbl').textContent = isDance(mySeat) ? 'Rời sàn nhảy' : 'Rời ghế';
+  $('dLeave').querySelector('.lbl').textContent = isDJ(mySeat) ? 'Rời bàn DJ' : isDance(mySeat) ? 'Rời sàn nhảy' : 'Rời ghế';
   document.querySelector('#bl [data-cam=seat]').classList.toggle('hidden', !seated);
   $('reclineBox').classList.toggle('hidden', !seated || camMode !== 'seat');   // ngả lưng chỉ chỉnh ở góc nhìn từ ghế
   updateFeedUI();
@@ -3445,6 +3454,7 @@ function applyState(s, force) {
   }
   quiet();
   if (s.current.live) { s.paused ? A.pause() : A.play(); return; }
+  setMediaRate(s.rate || 1);
   const playing = A.isPlaying(), t = A.time();
   if (s.paused) { if (playing) A.pause(); if (Math.abs(t - s.position) > 1) A.seek(s.position); }
   else { if (Math.abs(t - s.position) > 2) A.seek(s.position); if (!playing && !A.isBuffering()) A.play(); }
@@ -4243,7 +4253,7 @@ function genderTag(lookOrG) {
 }
 // ảnh + giới tính người gửi: lấy từ tin (server mới gửi kèm), tin cũ thì tra theo người đang trong phòng
 function chatWho(m) { const u = lastState && lastState.users.find((x) => x.name === m.name); return { av: m.av ?? (u ? u.av : 0), g: m.g || (u && u.look && u.look.gender) || 'm', look: m.ns ? chatLook(m) : u && u.look }; }
-function personSeatText(u) { return u.seat == null ? 'Đang đứng xem' : isDance(u.seat) ? 'Trên sàn nhảy' : 'Ghế ' + seatName(u.seat); }
+function personSeatText(u) { return u.seat == null ? 'Đang đứng xem' : isDJ(u.seat) ? '🎧 Đang chơi DJ' : isDance(u.seat) ? 'Trên sàn nhảy' : 'Ghế ' + seatName(u.seat); }
 function setAvatarEl(el, name, ver) { const url = avatarUrl(name, ver); el.style.backgroundImage = url ? `url("${url}")` : ''; el.textContent = url ? '' : (name || '?')[0].toUpperCase(); }
 function renderPeople() {
   const users = (lastState && lastState.users) || [], box = $('peopleList'); box.textContent = '';
@@ -4488,7 +4498,7 @@ $('authForm').addEventListener('submit', async (e) => {
   try {
     const r = await api('/api/' + authMode, { username: u, password: p });
     token = r.token; username = r.username; localStorage.setItem('rc_token', token); $('auPass').value = $('auPass2').value = '';
-    api('/api/me').then((m) => { isAdmin = !!m.admin; $('btnAdmin').classList.toggle('hidden', !isAdmin); }).catch(() => {});
+    api('/api/me').then((m) => { isAdmin = !!m.admin; myRoles = m.roles || []; $('btnAdmin').classList.toggle('hidden', !isAdmin); updateDJBtn(); }).catch(() => {});
     afterAuth();
   } catch (err) { $('auErr').textContent = err.message; }
   $('auSubmit').disabled = false;
@@ -4661,6 +4671,7 @@ function doJoin(room, password, rejoin) {
 function afterAuth() {
   $('umName').textContent = 'Đăng nhập: ' + username;
   $('btnAdmin').classList.toggle('hidden', !isAdmin);
+  updateDJBtn();
   renderAvatarBtn();
   if (myCreatedAt == null) api('/api/me').then((r) => { setFashion(r); myAvatarVer = r.avatarVer || 0; myCreatedAt = r.createdAt; myBg = r.bg || null; renderAvatarBtn(); }).catch(() => {});
   connectSocket();
@@ -4689,7 +4700,7 @@ function connectSocket() {
   socket.on('kicked', () => { toast('Tài khoản này vừa vào phòng ở nơi khác'); inRoom = false; socket.disconnect(); setTimeout(() => (location.href = location.pathname), 1500); });
   socket.on('state', (s) => {
     if (redirecting) return;
-    const first = needFirst; needFirst = false; syncAvatars(s.users, first); applyState(s, first); applyParty(s.party); applyShare(s);
+    const first = needFirst; needFirst = false; syncAvatars(s.users, first); applyState(s, first); applyParty(s.party); applyShare(s); djOnState(s);
     if (first && myReclineLocal != null) socket.emit('seat:recline', myReclineLocal);
   });
   socket.on('sync', (d) => {                                     // máy chủ gửi mốc thời gian định kỳ → lệch quá 2.5s thì tua cho khớp
@@ -4698,6 +4709,8 @@ function connectSocket() {
     if (Math.abs(media.time() - d.position) > 2.5) { quiet(); media.seek(d.position); }
   });
   socket.on('toast', toast);
+  socket.on('dj:fx', onDJFx);
+  socket.on('roles', (d) => { myRoles = (d && d.roles) || []; updateDJBtn(); if (myRoles.includes('dj')) toast('🎧 Bạn vừa được cấp vai trò DJ'); });
   socket.on('order', (o) => {                                  // ai đó gọi món → nhân viên bưng ra
     if (!o || !Array.isArray(o.items)) return;
     const items = o.items.filter((id) => MENU_BY_ID[id]);
@@ -4718,7 +4731,185 @@ function connectSocket() {
 // ---- Khởi động: kiểm tra token cũ
 (async () => {
   if (!token) return showOnly('auth');
-  try { const r = await api('/api/me'); username = r.username; setFashion(r); myAvatarVer = r.avatarVer || 0; myCreatedAt = r.createdAt; myBg = r.bg || null; isAdmin = !!r.admin; afterAuth(); }
+  try { const r = await api('/api/me'); username = r.username; setFashion(r); myAvatarVer = r.avatarVer || 0; myCreatedAt = r.createdAt; myBg = r.bg || null; isAdmin = !!r.admin; myRoles = r.roles || []; afterAuth(); }
   catch (e) { localStorage.removeItem('rc_token'); token = null; if (/khoá|chặn/.test(e.message)) $('auErr').textContent = e.message; showOnly('auth'); }
 })();
 applyVolume();
+
+// =====================================================================
+//  BÀN DJ — người có vai trò DJ lên sân khấu, chà đĩa, đổi tốc độ / tua / phanh video chung, bắn hiệu ứng âm thanh + ánh sáng
+// =====================================================================
+var myRoles = [];                                               // vai trò của mình (vd 'dj'), lấy từ /api/me
+var djFx = { laserUntil: 0, pumpUntil: 0, scratchUntil: 0, brakeUntil: 0, braking: false, cutOn: false, cutT: 0, duckT: 0, deckV: [0, 0] };
+let djPanelOpen = false;
+const canDJme = () => DJ_IDX >= 0 && (myRoles.includes('dj') || isAdmin);
+const amDJ = () => !!(cur && cur.dj && cur.dj.id === myId);
+function updateDJBtn() { $('dDJ').classList.toggle('hidden', !canDJme()); }
+
+// tốc độ phát của trình phát (YouTube / file video); nền tảng khác giữ nguyên tốc độ
+function setMediaRate(r) {
+  if (djFx.braking) return;
+  try {
+    if (media === YTA && player && player.getPlaybackRate) { if (player.getPlaybackRate() !== r) player.setPlaybackRate(r); }
+    else if (media === FileA && FileA.v && FileA.v.playbackRate !== r) FileA.v.playbackRate = r;
+  } catch {}
+}
+setInterval(() => { if (cur && cur.current && media) setMediaRate(cur.rate || 1); }, 1000);   // YouTube đôi khi tự trả về x1 khi nạp lại
+
+// ---- bàn DJ 3D giữa sân khấu (chỉ hiện khi có DJ)
+const djBooth = new THREE.Group(), djPlatters = [], djBars = [];
+if (DJ_IDX >= 0) {
+  djBooth.position.set(0, STAGE_H, DJ_SPOT.z + 1.25); djBooth.visible = false; scene.add(djBooth);
+  const ADDB = { transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor };
+  const accA = new THREE.MeshBasicMaterial({ color: CT.a }), accB = new THREE.MeshBasicMaterial({ color: CT.b }); PARTY_TINT.push(accA);
+  rb(4.8, 1.15, 1.15, 0x111116, 0, 0.575, 0, djBooth, 0.08, { metalness: 0.45, roughness: 0.4 });           // thân bàn
+  {                                                                                                         // mặt trước: chữ neon XCVN DJ
+    const c = document.createElement('canvas'); c.width = 1024; c.height = 220; const x = c.getContext('2d');
+    x.fillStyle = '#07070a'; x.fillRect(0, 0, 1024, 220);
+    const g = x.createLinearGradient(0, 0, 1024, 0); g.addColorStop(0, cssHex(CT.a)); g.addColorStop(1, cssHex(CT.b));
+    x.strokeStyle = g; x.lineWidth = 6; x.strokeRect(12, 12, 1000, 196);
+    x.font = '900 110px system-ui, "Segoe UI", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = g; x.shadowColor = cssHex(CT.a); x.shadowBlur = 30;
+    x.fillText('XCVN  DJ', 512, 104);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 0.97), new THREE.MeshBasicMaterial({ map: t })); m.position.set(0, 0.62, 0.581); djBooth.add(m);
+  }
+  for (let j = 0; j < 18; j++) {                                                                            // cột sóng nhạc nhảy theo nhịp
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1, 0.02), j % 2 ? accB : accA);
+    b.geometry.translate(0, 0.5, 0); b.position.set(-2.04 + j * 0.24, 0.06, 0.59); b.scale.y = 0.1; djBooth.add(b); djBars.push(b);
+  }
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(4.86, 0.04, 0.04), accA); edge.position.set(0, 1.15, 0.585); djBooth.add(edge);
+  const vinyl = (() => {                                                                                    // mặt đĩa than: rãnh + nhãn giữa
+    const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+    x.fillStyle = '#0b0b0d'; x.beginPath(); x.arc(128, 128, 128, 0, Math.PI * 2); x.fill();
+    x.strokeStyle = 'rgba(255,255,255,.07)'; for (let r = 40; r < 126; r += 3) { x.beginPath(); x.arc(128, 128, r, 0, Math.PI * 2); x.stroke(); }
+    x.fillStyle = cssHex(CT.a); x.beginPath(); x.arc(128, 128, 36, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#fff'; x.fillRect(126, 96, 4, 26); x.beginPath(); x.arc(128, 128, 4, 0, Math.PI * 2); x.fill();
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  const vinylMat = new THREE.MeshStandardMaterial({ map: vinyl, roughness: 0.35, metalness: 0.3 }), sideMat = smat(0x2a2a30, { metalness: 0.8 });
+  for (const sx of [-1, 1]) {
+    rb(1.5, 0.1, 1.0, 0x1c1c24, sx * 1.48, 1.2, 0, djBooth, 0.03, { metalness: 0.5 });                         // mâm đĩa
+    const pl = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.05, 40), [sideMat, vinylMat, vinylMat]); pl.position.set(sx * 1.48 - 0.1, 1.28, 0); djBooth.add(pl); djPlatters.push(pl);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.62), smat(0xc8c8d0, { metalness: 0.9 })); arm.position.set(sx * 1.48 + 0.45, 1.33, -0.05); arm.rotation.y = 0.35; djBooth.add(arm);
+    const led = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.06), accB); led.position.set(sx * 1.48 + 0.6, 1.26, 0.38); djBooth.add(led);
+  }
+  rb(1.0, 0.12, 0.9, 0x24242c, 0, 1.21, 0, djBooth, 0.03, { metalness: 0.5 });                                // bàn trộn
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) { const k = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.06, 12), smat(0xdedee6, { metalness: 0.7 })); k.position.set(-0.3 + i * 0.3, 1.3, -0.28 + j * 0.18); djBooth.add(k); }
+  for (let i = 0; i < 3; i++) { const f = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 0.05), i === 1 ? accB : accA); f.position.set(-0.3 + i * 0.3, 1.29, 0.12 + (i % 2) * 0.08); djBooth.add(f); }
+  const xf = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.04, 0.06), accB); xf.position.set(0, 1.29, 0.36); djBooth.add(xf);
+  const lid = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.52, 0.03), smat(0x1a1a20, { metalness: 0.6 })); lid.position.set(0, 1.55, -0.42); lid.rotation.x = 0.28; djBooth.add(lid);   // laptop (mặt lưng hướng khán giả)
+  const logo = new THREE.Mesh(new THREE.CircleGeometry(0.1, 24), accA); logo.position.set(0, 1.56, -0.4); logo.rotation.x = 0.28; djBooth.add(logo);
+  const pool = new THREE.Mesh(new THREE.CircleGeometry(2.6, 40), new THREE.MeshBasicMaterial({ color: CT.a, opacity: 0.22, ...ADDB })); pool.rotation.x = -Math.PI / 2; pool.position.set(0, 0.03, -1.0); djBooth.add(pool);   // vũng sáng dưới chân DJ
+  djBooth.userData.update = (dt, t) => {
+    if (!djBooth.visible) return;
+    const now = performance.now(), playing = !!(cur && cur.current && !cur.paused);
+    const base = playing ? (cur.rate || 1) * 3.5 * (now < djFx.brakeUntil ? Math.max(0, (djFx.brakeUntil - now - 1000) / 1000) : 1) : 0;
+    for (let i = 0; i < 2; i++) {
+      djFx.deckV[i] *= Math.pow(0.03, dt);
+      const w = base + djFx.deckV[i]; djPlatters[i].rotation.y -= w * dt;
+      if (djPanel && amDJ()) djPanel.spin(i, w * dt);
+    }
+    const beat = t * BPM / 60, k = Math.exp(-(beat % 1) * 5);
+    djBars.forEach((b, j) => { b.scale.y = playing ? 0.12 + (0.5 + 0.5 * Math.sin(t * (5 + j * 1.3) + j * 2.1)) * 0.75 * (0.45 + 0.55 * k) : 0.06; });
+  };
+  MYSTIC_SPIN.push(djBooth);
+}
+
+// dáng DJ: tay đặt trên 2 đĩa, chà thì tay phải lắc, đầu gật theo nhịp; lúc drop giơ tay trái; thỉnh thoảng 1 tay giữ tai nghe
+function djStep(a, t, y0) {
+  const g = a.g, now = performance.now(), beat = t * BPM / 60, k = Math.exp(-(beat % 1) * 5);
+  const scratching = now < djFx.scratchUntil, pump = now < djFx.pumpUntil, phones = !scratching && !pump && Math.floor(beat / 8) % 2 === 1;
+  g.rotation.y = Math.PI; g.position.y = y0 + Math.abs(Math.sin(beat * Math.PI)) * 0.04;
+  a.armR.rotation.set(0.55, scratching ? Math.sin(t * 32) * 0.45 : 0, 0.16);
+  if (pump) a.armL.rotation.set(0.2, 0, -2.75 + k * 0.35);
+  else if (phones) a.armL.rotation.set(0.2, 0, -2.2);
+  else a.armL.rotation.set(0.55, 0, -0.16);
+  if (a.elbowL) { a.elbowL.rotation.set(pump ? 0.2 : phones ? 0 : 1.05, 0, phones ? -1.9 : 0); a.elbowR.rotation.set(1.05, 0, 0); }
+  a.legL.rotation.set(0, 0, 0); a.legR.rotation.set(0, 0, 0);
+  a.upper.rotation.x = -0.08 - 0.05 * k; a.upper.rotation.z = 0;
+  a.body.position.x = a.body.position.z = 0; a.body.rotation.y = 0;
+  a.head.rotation.set(0.1 + 0.14 * k, 0, phones ? 0.22 : 0); a.head.position.y = HEAD_Y;
+  a.wasDancing = true;
+}
+
+// ---- bảng điều khiển
+const djPanel = DJ_IDX >= 0 ? buildPanel({
+  $, volume: () => vol,
+  emit: (k, v, deck) => socket && socket.emit('dj:fx', { k, v, deck }),
+  onScratch: (v, i) => { djFx.scratchUntil = performance.now() + 250; djFx.deckV[i] += v * 14; duckVideo(0.35, 160); },
+  onClose: () => { djPanelOpen = false; djPanel.show(false); socket && socket.emit('dj:close'); },
+}) : null;
+$('dDJ').onclick = () => {
+  sfx('init', vol);                                              // mở khoá âm thanh trong lúc bấm
+  if (amDJ()) { djPanelOpen = !djPanelOpen; djPanel.show(djPanelOpen); return; }
+  if (cur && cur.dj) return toast(`DJ ${cur.dj.name} đang chơi`);
+  socket.emit('dj:open', (r) => {
+    if (!r || r.error) return toast((r && r.error) || 'Không mở được bàn DJ');
+    djPanelOpen = true; if (amDJ()) djPanel.show(true);         // trạng thái phòng thường tới trước lời đáp này
+    toast('🎧 Đang đi lên bàn DJ…');
+  });
+};
+function djOnState(s) {
+  if (DJ_IDX < 0) return;
+  djBooth.visible = !!s.dj;
+  const me = !!(s.dj && s.dj.id === myId);
+  djPanel.show(me && djPanelOpen);
+  if (!me) djPanelOpen = false;
+  djPanel.setRate(s.rate || 1); djPanel.setParty(s.party && s.party.dj);
+  $('djLbl').textContent = me ? 'Bảng DJ' : 'Bàn DJ';
+  $('dDJ').classList.toggle('active', me);
+  $('djBadge').classList.toggle('hidden', !s.dj);
+  if (s.dj) $('djBadge').textContent = `🎧 DJ ${s.dj.name}${(s.rate || 1) !== 1 ? ' · x' + s.rate : ''}`;
+}
+
+// ---- hiệu ứng cho cả rạp
+function videoVol() { return djFx.cutOn ? 0 : vol; }
+function duckVideo(f, ms) {                                      // hạ nhỏ tiếng video một chút cho nghe rõ tiếng chà
+  if (!media || vol === 0 || djFx.cutOn) return;
+  try { media.volume(Math.round(vol * f)); } catch {}
+  clearTimeout(djFx.duckT); djFx.duckT = setTimeout(() => { if (!djFx.cutOn) applyVolume(); }, ms);
+}
+function djFlash(kind) {
+  const el = $('djFlash');
+  if (kind === 'strobe') { el.className = 'strobe'; clearTimeout(el._t); el._t = setTimeout(() => (el.className = ''), 1500); }
+  else if (kind === 'blackout') { el.className = 'black'; clearTimeout(el._t); el._t = setTimeout(() => (el.className = ''), 1700); }
+  else if (kind === 'laser') djFx.laserUntil = performance.now() + 7000;
+  else if (kind === 'color') { LED_BASE.setHSL(Math.random(), 1, 0.55); }
+}
+function djStutter() {                                           // lặp lại 1 nhịp ngắn 4 lần rồi chạy tiếp
+  if (!media || !cur || !cur.current || cur.current.live || (media !== YTA && media !== FileA)) return;
+  const t0 = media.time(); quiet(2000);
+  [0, 150, 300, 450].forEach((d) => setTimeout(() => { try { media.seek(Math.max(0, t0)); } catch {} }, d));
+  setTimeout(() => { try { media.seek(t0 + 0.6 * (cur.rate || 1)); } catch {} }, 600);
+}
+function djBrakeMedia() {                                        // chậm dần trước khi server dừng video 1 giây
+  if (!media || (media !== YTA && media !== FileA)) return;
+  const set = (r) => { try { if (media === YTA) player.setPlaybackRate(r); else if (FileA.v) FileA.v.playbackRate = r; } catch {} };
+  djFx.braking = true; set(0.75); setTimeout(() => set(0.5), 300); setTimeout(() => set(0.25), 600);
+  setTimeout(() => { djFx.braking = false; setMediaRate((cur && cur.rate) || 1); }, 2300);
+}
+function onDJFx(d) {
+  if (!d) return;
+  const now = performance.now();
+  switch (d.k) {
+    case 'scratch':
+      if (!amDJ()) { scratchSound(d.v, vol); djFx.deckV[d.deck === 1 ? 1 : 0] += d.v * 14; duckVideo(0.35, 160); }
+      djFx.scratchUntil = now + 250; break;
+    case 'pad':
+      sfx(d.v, vol);
+      if (d.v === 'drop') { setTimeout(() => djFlash('strobe'), 550); djFx.pumpUntil = now + 2600; }
+      else if (d.v === 'airhorn' || d.v === 'yeah' || d.v === 'siren') djFx.pumpUntil = now + 1500;
+      break;
+    case 'light': djFlash(d.v); break;
+    case 'cut':
+      djFx.cutOn = !!d.v; clearTimeout(djFx.cutT);
+      if (djFx.cutOn) { try { media && media.volume(0); } catch {} djFx.cutT = setTimeout(() => { djFx.cutOn = false; applyVolume(); }, 4000); }
+      else applyVolume();
+      break;
+    case 'stutter': djStutter(); break;
+    case 'rewind': sfx('rewind', vol); djFx.deckV[0] = djFx.deckV[1] = -30; quiet(1200); break;
+    case 'brake': sfx('brake', vol); djFx.brakeUntil = now + 2100; djBrakeMedia(); break;
+    case 'rate': if (!amDJ()) toast(`🎧 DJ đổi tốc độ: x${d.v}`); break;
+  }
+}
+

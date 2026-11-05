@@ -8,7 +8,7 @@
 const express = require('express');
 
 module.exports = function setupAdmin(ctx) {
-  const { io, rooms, auth, TEMPLATES, CINEMA_THEMES, leaveRoom, startNext, sysMsg, setMainRoom } = ctx;
+  const { io, rooms, auth, TEMPLATES, CINEMA_THEMES, leaveRoom, startNext, sysMsg, setMainRoom, endDJ } = ctx;
   const router = express.Router();
   router.use(express.json({ limit: '20kb' }));
 
@@ -42,7 +42,7 @@ module.exports = function setupAdmin(ctx) {
     const ban = auth.banOf(u);
     return {
       username: u.username, createdAt: u.createdAt || null, lastSeen: u.lastSeen || null, lastIp: u.lastIp || null,
-      gender: u.gender || null, role: role(u.username), room: roomOf(u.username), online: socketsOf(u.username).length > 0,
+      gender: u.gender || null, role: role(u.username), roles: Array.isArray(u.roles) ? u.roles : [], room: roomOf(u.username), online: socketsOf(u.username).length > 0,
       ban: ban ? { until: ban.until || 0, reason: ban.reason || '', by: ban.by || '', at: ban.at || 0 } : null,
     };
   };
@@ -72,6 +72,7 @@ module.exports = function setupAdmin(ctx) {
     if (f === 'online') list = list.filter((u) => u.online);
     else if (f === 'banned') list = list.filter((u) => u.ban);
     else if (f === 'admin') list = list.filter((u) => u.role !== 'user');
+    else if (f === 'dj') list = list.filter((u) => u.roles.includes('dj'));
     else if (f === 'new') list = list.filter((u) => u.createdAt > Date.now() - 864e5);
     list.sort((a, b) => (b.online - a.online) || ((b.lastSeen || b.createdAt || 0) - (a.lastSeen || a.createdAt || 0)));
     res.json({ total: list.length, list: list.slice(0, 300) });
@@ -126,6 +127,19 @@ module.exports = function setupAdmin(ctx) {
     const st = S(), k = K(u.username); st.admins = (st.admins || []).filter((x) => x !== k);
     if (req.body.admin) { st.admins.push(k); delete u.ban; auth.saveUsers(); }
     log(req.admin, `${req.body.admin ? 'Cấp' : 'Gỡ'} quyền admin: ${u.username}`);
+    res.json({ ok: true });
+  });
+
+  router.post('/djrole', (req, res) => {                     // admin: cấp / gỡ vai trò DJ
+    const u = auth.users()[K(req.body.username)];
+    if (!u) return res.status(404).json({ error: 'Không có tài khoản này' });
+    const on = !!req.body.on;
+    u.roles = (Array.isArray(u.roles) ? u.roles : []).filter((r) => r !== 'dj');
+    if (on) u.roles.push('dj');
+    auth.saveUsers();
+    for (const s of socketsOf(u.username)) s.emit('roles', { roles: u.roles });
+    if (!on) for (const r of rooms.values()) if (r.dj && K(r.dj.name) === K(u.username) && !auth.isAdmin(u.username)) endDJ(r, true);
+    log(req.admin, `${on ? 'Cấp' : 'Gỡ'} vai trò DJ: ${u.username}`);
     res.json({ ok: true });
   });
 

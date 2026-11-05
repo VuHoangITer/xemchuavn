@@ -93,6 +93,9 @@ function makeRoom(id, type, extra = {}) {
   const tpl = TEMPLATES[extra.tpl] ? extra.tpl : 'cinema', T = TEMPLATES[tpl];
   return {
     tpl, nSeats: T.seats, nDance: T.dance, cap: T.cap,
+    djIdx: T.dance ? T.seats + T.dance : -1,   // chỗ đứng sau bàn DJ (chỉ phòng có sân khấu), ngay sau các chỗ nhảy
+    dj: null,                                   // { id, name, prev } người đang chơi DJ
+    rate: 1,                                    // tốc độ phát chung (DJ chỉnh)
     id,
     type, // 'public' | 'private'
     name: extra.name || (type === 'public' ? 'Rạp công cộng' : id),
@@ -106,7 +109,7 @@ function makeRoom(id, type, extra = {}) {
     token: 0, // tăng mỗi lần đổi video
     votes: new Set(),
     users: new Map(), // socket.id -> { name, voice, seat }
-    seats: new Array(T.seats + T.dance).fill(null), // seat index -> socket.id (sau các ghế là chỗ nhảy, nếu có)
+    seats: new Array(T.seats + T.dance + (T.dance ? 1 : 0)).fill(null), // seat index -> socket.id (sau các ghế là chỗ nhảy, nếu có)
     party: new Set(),               // ai đang vote bật đèn bar
     chat: [],
     emptyTimer: null,
@@ -120,7 +123,7 @@ rooms.set('main', makeRoom('main', 'public', { name: 'Rạp công cộng' }));
 function setMainRoom(tpl, name) {
   const old = rooms.get('main');
   const nr = makeRoom('main', 'public', { name: name || old.name, tpl });
-  for (const k of ['queue', 'current', 'startedAt', 'paused', 'pausedAt', 'token', 'chat']) nr[k] = old[k];
+  for (const k of ['queue', 'current', 'startedAt', 'paused', 'pausedAt', 'token', 'chat', 'rate']) nr[k] = old[k];
   if (old.tpl !== nr.tpl) {
     io.to('main').emit('server:reload', { what: 'layout', message: 'Quản trị viên vừa đổi bố cục rạp, đang tải lại…' });
     for (const sid of old.users.keys()) { const s = io.sockets.sockets.get(sid); if (s) { s.leave('main'); s.data.room = null; } }
@@ -131,7 +134,15 @@ function setMainRoom(tpl, name) {
 
 function position(room) {
   if (!room.current) return 0;
-  return room.paused ? room.pausedAt : Math.max(0, (Date.now() - room.startedAt) / 1000);
+  return room.paused ? room.pausedAt : Math.max(0, (Date.now() - room.startedAt) / 1000 * (room.rate || 1));
+}
+// đặt lại mốc thời gian để video đang ở giây t (theo tốc độ hiện tại)
+function setPos(room, t) {
+  if (room.paused) room.pausedAt = t; else room.startedAt = Date.now() - (t * 1000) / (room.rate || 1);
+}
+// đổi tốc độ phát chung mà không làm giật vị trí
+function setRate(room, r) {
+  const t = position(room); room.rate = r; setPos(room, t);
 }
 
 function needVotes(room) {
@@ -150,13 +161,13 @@ function checkParty(room) {
       room.party.clear();                 // hết giờ: xoá vote, đèn tắt
       scheduleBroadcast(room);
     }, PARTY_MS);
-  } else if (!on && room.partyTimer) {
+  } else if (!on && room.partyTimer && !room.partyForced) {
     clearTimeout(room.partyTimer); room.partyTimer = null; room.partyEnd = 0;
   }
 }
 function partyState(room) {
   const need = partyNeed(room), on = !!room.partyTimer;
-  return { votes: room.party.size, need, on, left: on ? Math.max(0, room.partyEnd - Date.now()) : 0, ids: [...room.party] };
+  return { votes: room.party.size, need, on, left: on ? Math.max(0, room.partyEnd - Date.now()) : 0, ids: [...room.party], dj: !!room.partyForced };
 }
 
 function snapshot(room) {
@@ -185,6 +196,8 @@ function snapshot(room) {
     party: partyState(room),
     users: list,
     share: room.share ? { id: room.share.id, name: room.share.name } : null,   // ai đang chia sẻ màn hình (phòng riêng)
+    rate: room.rate || 1,
+    dj: room.dj ? { id: room.dj.id, name: room.dj.name } : null,
   };
 }
 
@@ -206,6 +219,7 @@ function startNext(room) {
   const next = room.queue.shift() || null;
   room.current = next;
   room.startedAt = Date.now();
+  room.rate = 1;
   room.paused = false;
   room.pausedAt = 0;
   room.token++;
@@ -281,6 +295,7 @@ function leaveRoom(socket) {
   const room = rooms.get(socket.data.room);
   if (!room) return;
   const u = room.users.get(socket.id);
+  if (room.dj && room.dj.id === socket.id) endDJ(room, false);
   if (u && u.seat != null && room.seats[u.seat] === socket.id) room.seats[u.seat] = null;
   room.users.delete(socket.id);
   room.votes.delete(socket.id);
@@ -302,6 +317,29 @@ function leaveRoom(socket) {
   // vote có thể đủ sau khi người rời đi
   if (room.type === 'public' && room.current && room.votes.size >= needVotes(room)) startNext(room);
   else scheduleBroadcast(room);
+}
+
+// ---------- Bàn DJ ----------
+// Người có vai trò DJ (hoặc quản trị) lên bàn DJ trên sân khấu; điều khiển tốc độ / tua / phanh video chung + hiệu ứng âm thanh, ánh sáng cho cả rạp.
+const canDJ = (name) => auth.hasRole(name, 'dj') || auth.isAdmin(name);
+function endDJ(room, moveBack = true) {
+  const dj = room.dj; if (!dj) return;
+  room.dj = null;
+  clearTimeout(room.brakeT); clearTimeout(room.brakeT2);
+  if (room.paused && room.brakePause) { room.paused = false; setPos(room, room.pausedAt); }   // đang phanh dở → chạy tiếp
+  room.brakePause = false;
+  if (room.rate !== 1) setRate(room, 1);
+  if (room.partyForced) { room.partyForced = false; clearTimeout(room.partyTimer); room.partyTimer = null; room.partyEnd = 0; checkParty(room); }
+  const me = room.users.get(dj.id);
+  if (me && me.seat === room.djIdx) {
+    room.seats[room.djIdx] = null;
+    if (moveBack) {                                            // về lại ghế cũ (nếu còn trống) hoặc ghế trống bất kỳ
+      const back = dj.prev != null && room.seats[dj.prev] == null ? dj.prev : randomFreeSeat(room);
+      me.seat = back; if (back != null) room.seats[back] = dj.id;
+    } else me.seat = null;
+  }
+  sysMsg(room, `🎧 DJ ${dj.name} đã rời bàn DJ`);
+  broadcast(room);
 }
 
 // ---------- Socket handlers ----------
@@ -391,7 +429,8 @@ io.on('connection', (socket) => {
     if (now - socket.data.lastSeat < 800) return;
     socket.data.lastSeat = now;
     if (room.seats[idx] != null) return socket.emit('toast', 'Ghế này có người ngồi rồi');
-    if (me.seat != null) room.seats[me.seat] = null;
+    if (room.dj && room.dj.id === socket.id) endDJ(room, false);   // DJ đi chỗ khác → đóng bàn DJ
+    if (me.seat != null && room.seats[me.seat] === socket.id) room.seats[me.seat] = null;
     me.seat = idx;
     me.food = [];                    // đổi chỗ thì món cũ không theo sang
     room.seats[idx] = socket.id;
@@ -403,6 +442,7 @@ io.on('connection', (socket) => {
     const room = rooms.get(socket.data.room);
     const me = room && room.users.get(socket.id);
     if (!me || me.seat == null) return;
+    if (room.dj && room.dj.id === socket.id) return endDJ(room, false);
     if (room.seats[me.seat] === socket.id) room.seats[me.seat] = null;
     me.seat = null; me.food = [];
     scheduleBroadcast(room);
@@ -463,7 +503,7 @@ io.on('connection', (socket) => {
     const t = Math.max(0, Number(d.time) || 0);
     if (d.action === 'play') {
       room.paused = false;
-      room.startedAt = Date.now() - t * 1000;
+      room.startedAt = Date.now() - (t * 1000) / (room.rate || 1);
     } else if (d.action === 'pause') {
       room.paused = true;
       room.pausedAt = t;
@@ -481,6 +521,79 @@ io.on('connection', (socket) => {
   });
 
   // Vote bật đèn bar (bấm lần nữa = rút vote)
+  // ----- Bàn DJ -----
+  socket.on('dj:open', (cb) => {
+    cb = typeof cb === 'function' ? cb : () => {};
+    const room = rooms.get(socket.data.room), me = room && room.users.get(socket.id);
+    if (!me) return cb({ error: 'Chưa vào phòng' });
+    if (!canDJ(me.name)) return cb({ error: 'Bạn chưa có vai trò DJ' });
+    if (room.djIdx < 0) return cb({ error: 'Phòng này không có sân khấu để đặt bàn DJ' });
+    if (room.dj && room.dj.id === socket.id) return cb({ ok: true });
+    if (room.dj) return cb({ error: `DJ ${room.dj.name} đang chơi` });
+    const occ = room.seats[room.djIdx]; if (occ && occ !== socket.id) return cb({ error: 'Bàn DJ đang bận' });
+    const prev = me.seat;
+    if (prev != null && room.seats[prev] === socket.id) room.seats[prev] = null;
+    me.seat = room.djIdx; me.food = []; room.seats[room.djIdx] = socket.id;
+    room.dj = { id: socket.id, name: me.name, prev };
+    sysMsg(room, `🎧 DJ ${me.name} đã lên bàn DJ!`);
+    broadcast(room);
+    cb({ ok: true });
+  });
+  socket.on('dj:close', () => {
+    const room = rooms.get(socket.data.room);
+    if (room && room.dj && room.dj.id === socket.id) endDJ(room, true);
+  });
+  const DJ_PADS = new Set(['airhorn', 'siren', 'drop', 'clap', 'kick', 'zap', 'yeah', 'snare']);
+  const DJ_LIGHTS = new Set(['strobe', 'laser', 'blackout', 'color']);
+  const DJ_RATES = [0.5, 0.75, 1, 1.25, 1.5];
+  socket.on('dj:fx', (d) => {
+    const room = rooms.get(socket.data.room);
+    if (!room || !room.dj || room.dj.id !== socket.id || !d || typeof d.k !== 'string') return;
+    const now = Date.now();
+    if (d.k === 'scratch') {                                      // chà đĩa: gửi liên tục khi kéo đĩa → tối đa 30 lần/giây
+      if (now - (socket.data.djS || 0) < 33) return; socket.data.djS = now;
+      const v = Math.max(-1, Math.min(1, Number(d.v) || 0)), deck = d.deck === 1 ? 1 : 0;
+      return socket.volatile.to(room.id).emit('dj:fx', { k: 'scratch', v, deck });
+    }
+    if (d.k !== 'cut' && now - (socket.data.djT || 0) < 150) return; socket.data.djT = now;
+    const live = !room.current || room.current.live;
+    switch (d.k) {
+      case 'pad': if (DJ_PADS.has(d.v)) io.to(room.id).emit('dj:fx', { k: 'pad', v: d.v }); return;
+      case 'light': if (DJ_LIGHTS.has(d.v)) io.to(room.id).emit('dj:fx', { k: 'light', v: d.v }); return;
+      case 'cut': io.to(room.id).emit('dj:fx', { k: 'cut', v: !!d.v }); return;   // tắt tiếng video trong lúc giữ nút
+      case 'stutter': io.to(room.id).emit('dj:fx', { k: 'stutter' }); return;     // lặp nhịp ngắn (mỗi máy tự làm rồi đồng bộ lại)
+      case 'party': {                                              // bật / tắt đèn bar ngay, không cần vote
+        room.partyForced = !room.partyForced;
+        clearTimeout(room.partyTimer); room.partyTimer = null; room.partyEnd = 0;
+        if (room.partyForced) { room.partyEnd = now + 30 * 60_000; room.partyTimer = setTimeout(() => { room.partyTimer = null; room.partyForced = false; scheduleBroadcast(room); }, 30 * 60_000); }
+        else checkParty(room);
+        broadcast(room); return;
+      }
+      case 'rate': {                                               // tốc độ phát chung
+        const r = DJ_RATES.includes(Number(d.v)) ? Number(d.v) : 1;
+        if (live || r === room.rate) return;
+        setRate(room, r); broadcast(room); io.to(room.id).emit('dj:fx', { k: 'rate', v: r }); return;
+      }
+      case 'rewind': {                                             // quay ngược đĩa: lùi 6 giây cho cả rạp
+        if (live) return;
+        io.to(room.id).emit('dj:fx', { k: 'rewind' });
+        setTimeout(() => { if (room.dj && room.current && !room.current.live) { setPos(room, Math.max(0, position(room) - 6)); broadcast(room); } }, 650);
+        return;
+      }
+      case 'brake': {                                              // phanh đĩa: chậm dần → dừng 1 giây → chạy tiếp
+        if (live || room.paused) return;
+        io.to(room.id).emit('dj:fx', { k: 'brake' });
+        clearTimeout(room.brakeT); clearTimeout(room.brakeT2);
+        room.brakeT = setTimeout(() => {
+          if (!room.current || room.paused) return;
+          room.pausedAt = position(room); room.paused = true; room.brakePause = true; broadcast(room);
+          room.brakeT2 = setTimeout(() => { if (room.brakePause && room.paused) { room.paused = false; room.brakePause = false; setPos(room, room.pausedAt); broadcast(room); } }, 1100);
+        }, 900);
+        return;
+      }
+    }
+  });
+
   socket.on('party', () => {
     const room = rooms.get(socket.data.room);
     if (!room || !room.users.has(socket.id)) return;
@@ -594,7 +707,7 @@ setInterval(() => {
 
 // chờ nạp xong dữ liệu (file / MongoDB) rồi mới mở cổng
 // trang quản trị
-app.use('/api/admin', require('./admin')({ io, rooms, auth, TEMPLATES, CINEMA_THEMES, leaveRoom, startNext, sysMsg, setMainRoom }));
+app.use('/api/admin', require('./admin')({ io, rooms, auth, TEMPLATES, CINEMA_THEMES, leaveRoom, startNext, sysMsg, setMainRoom, endDJ }));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Không có API này' }));
 
 auth.ready.then(() => {                                       // áp cài đặt đã lưu cho rạp công cộng

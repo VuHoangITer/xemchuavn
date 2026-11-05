@@ -686,6 +686,50 @@
   }
   @media (max-width: 380px) { .dbtn { min-width: 56px; font-size: 10px; } #pill { font-size: 11px; } }
   @media (pointer: coarse) { .witem, .wslot, .dbtn, #bl button { touch-action: manipulation; } }
+  /* ===== Bàn DJ ===== */
+  #djFlash { position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0; transition: opacity .25s; }
+  #djFlash.strobe { background: #fff; animation: djStrobe .11s steps(2, jump-none) infinite; }
+  #djFlash.black { background: #000; opacity: .82; }
+  @keyframes djStrobe { 0% { opacity: .5; } 100% { opacity: 0; } }
+  #djBadge { position: fixed; top: 54px; left: 50%; transform: translateX(-50%); z-index: 6; padding: 4px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700;
+    background: linear-gradient(135deg, rgba(255,42,61,.85), rgba(155,48,255,.85)); color: #fff; box-shadow: 0 4px 18px rgba(155,48,255,.35); pointer-events: none; white-space: nowrap; }
+  body:not(.in-room) #djBadge, body:not(.in-room) #djPanel { display: none !important; }
+  #djPanel { position: fixed; left: 50%; transform: translateX(-50%); bottom: 64px; z-index: 30; width: min(900px, 96vw); padding: 10px 12px; border-radius: 18px; }
+  .djHead { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .djHead b { font-size: 15px; white-space: nowrap; }
+  .djHint { color: var(--muted); font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .djBtn { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12); color: inherit; border-radius: 10px; padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .djBtn:hover { background: rgba(255,255,255,.13); }
+  .djBtn.on { background: linear-gradient(135deg, #ff2a3d, #9b30ff); border-color: transparent; color: #fff; font-weight: 700; }
+  .djBtn.danger { background: rgba(255,60,80,.18); border-color: rgba(255,60,80,.4); }
+  .djBtn.fx { flex: 1; }
+  .djBody { display: flex; gap: 12px; align-items: center; }
+  .djMid { flex: 1; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+  .djRow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .djLbl { font-size: 12px; color: var(--muted); margin-right: 2px; }
+  .djPads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .djPad { background: radial-gradient(circle at 50% 30%, rgba(255,42,61,.28), rgba(155,48,255,.16)); border: 1px solid rgba(255,90,120,.35); border-radius: 12px; color: inherit; font-size: 20px; padding: 7px 4px 5px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .djPad span { font-size: 11.5px; font-weight: 600; }
+  .djPad:active, .djBtn:active { transform: scale(.95); filter: brightness(1.3); }
+  .djDeck { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+  .djVinyl { width: 150px; aspect-ratio: 1; border-radius: 50%; cursor: grab; touch-action: none; position: relative; box-shadow: 0 0 0 4px #222, 0 0 22px rgba(155,48,255,.35);
+    background: repeating-radial-gradient(circle, #0c0c0e 0 2px, #19191c 2px 4px); }
+  .djVinyl.grab { cursor: grabbing; box-shadow: 0 0 0 4px #ff2a3d, 0 0 26px rgba(255,42,61,.6); }
+  .djVinyl i { position: absolute; inset: 33%; border-radius: 50%; background: radial-gradient(circle, #fff 0 6%, #ff2a3d 7% 60%, #9b30ff 61%); }
+  .djVinyl::after { content: ''; position: absolute; left: 50%; top: 6%; width: 3px; height: 22%; margin-left: -1.5px; background: rgba(255,255,255,.7); border-radius: 2px; }
+  #djPanel.mini .djBody, #djPanel.mini .djHint { display: none; }
+  #djPanel.mini .djHead { margin: 0; }
+  #djPanel.mini #djMin { transform: rotate(180deg); }
+  #dDJ.active { background: linear-gradient(135deg, rgba(255,42,61,.35), rgba(155,48,255,.35)); }
+  @media (max-width: 760px) {
+    #djPanel { bottom: calc(var(--dockH, 120px) + 8px); padding: 8px; width: 98vw; }
+    .djHint { display: none; }
+    .djBody { gap: 6px; }
+    .djVinyl { width: 78px; }
+    .djBtn { padding: 5px 7px; font-size: 12px; }
+    .djPad { font-size: 16px; padding: 5px 2px 4px; } .djPad span { font-size: 10px; }
+    #djBadge { top: 46px; font-size: 11.5px; }
+  }
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pacifico&family=Lobster&family=Dancing+Script:wght@700&family=Baloo+2:wght@700&family=Comfortaa:wght@700&family=Pattaya&family=Itim&family=Charm:wght@700&family=Patrick+Hand&family=Sriracha&family=Playfair+Display:wght@700&family=Montserrat:wght@800&family=Bungee&family=Oswald:wght@600&family=Mali:wght@700&family=Grandstander:wght@800&display=swap">
@@ -878,6 +922,7 @@
   <button class="dbtn hidden" data-panel="canteen" id="dCanteen"><span class="ic"><svg class="ico"><use href="#i-popcorn"/></svg></span>Căn tin</button>
   <button class="dbtn" data-panel="chat"><span class="ic"><svg class="ico"><use href="#i-chat"/></svg></span>Trò chuyện<i class="badge" id="cBadge"></i></button>
   <button class="dbtn" id="dParty" title="Vote bật đèn bar (cần 1/3 phòng)"><span class="ic"><svg class="ico"><use href="#i-sparkles"/></svg></span><span id="partyLbl">Đèn bar</span><i class="badge" id="pBadge"></i></button>
+  <button class="dbtn hidden" id="dDJ" title="Bàn DJ trên sân khấu"><span class="ic"><svg class="ico" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg></span><span id="djLbl">Bàn DJ</span></button>
   <button class="dbtn hidden" id="dLeave"><span class="ic"><svg class="ico"><use href="#i-leave"/></svg></span><span class="lbl">Rời ghế</span></button>
   <button class="dbtn hidden" id="dShare"><span class="ic"><svg class="ico"><use href="#i-monitor"/></svg></span><span id="shareBtnLbl">Chia sẻ MH</span></button>
   <button class="dbtn hidden" data-panel="voice" id="dVoice"><span class="ic"><svg class="ico"><use href="#i-mic"/></svg></span>Voice</button>
@@ -960,5 +1005,37 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script type="module" src="/app.js"></script>
+<!-- ===== Bàn DJ ===== -->
+<div id="djFlash"></div>
+<div id="djBadge" class="hidden"></div>
+<div id="djPanel" class="glass hidden">
+  <div class="djHead">
+    <b>🎧 Bàn DJ</b>
+    <span class="djHint">Kéo vòng đĩa để chà · phím 1–8 pad · Z phanh · X quay ngược · C lặp nhịp</span>
+    <button id="djMin" class="djBtn" title="Thu gọn / mở">▾</button>
+    <button id="djClose" class="djBtn danger">Rời bàn DJ</button>
+  </div>
+  <div class="djBody">
+    <div class="djDeck" data-deck="0"><div class="djVinyl"><i></i></div><span>Đĩa A</span></div>
+    <div class="djMid">
+      <div class="djRow"><span class="djLbl">Tốc độ video</span>
+        <button class="djBtn" data-rate="0.5">x0.5</button><button class="djBtn" data-rate="0.75">x0.75</button><button class="djBtn on" data-rate="1">x1</button><button class="djBtn" data-rate="1.25">x1.25</button><button class="djBtn" data-rate="1.5">x1.5</button>
+      </div>
+      <div class="djRow">
+        <button class="djBtn fx" data-fx="rewind">⏪ Quay ngược</button><button class="djBtn fx" data-fx="brake">🛑 Phanh đĩa</button><button class="djBtn fx" data-fx="stutter">🔁 Lặp nhịp</button><button class="djBtn fx" data-cut>🔇 CUT (giữ)</button>
+      </div>
+      <div class="djPads">
+        <button class="djPad" data-pad="airhorn">📯<span>Còi hơi</span></button><button class="djPad" data-pad="siren">🚨<span>Còi hú</span></button>
+        <button class="djPad" data-pad="drop">💥<span>Drop</span></button><button class="djPad" data-pad="yeah">🙌<span>Ê ê!</span></button>
+        <button class="djPad" data-pad="kick">🥁<span>Kick</span></button><button class="djPad" data-pad="snare">🪘<span>Snare</span></button>
+        <button class="djPad" data-pad="clap">👏<span>Vỗ tay</span></button><button class="djPad" data-pad="zap">⚡<span>Zap</span></button>
+      </div>
+      <div class="djRow">
+        <button class="djBtn" data-fx="party">🪩 Đèn bar</button><button class="djBtn" data-light="strobe">✨ Nháy</button><button class="djBtn" data-light="laser">🔦 Laser</button><button class="djBtn" data-light="blackout">🌑 Tắt đèn</button><button class="djBtn" data-light="color">🎨 Đổi màu</button>
+      </div>
+    </div>
+    <div class="djDeck" data-deck="1"><div class="djVinyl"><i></i></div><span>Đĩa B</span></div>
+  </div>
+</div>
 </body>
 </html>

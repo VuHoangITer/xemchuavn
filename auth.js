@@ -29,6 +29,7 @@ const keyOf = (name) => cleanName(name).toLocaleLowerCase('vi');   // so khớp 
 const OWNERS = new Set(String(process.env.ADMIN_USERS || '').split(',').map((x) => keyOf(x)).filter(Boolean));
 const isOwner = (name) => OWNERS.has(keyOf(name));
 const isAdmin = (name) => isOwner(name) || (settings.admins || []).includes(keyOf(name));
+const hasRole = (name, r) => { const u = users[keyOf(name)]; return !!(u && Array.isArray(u.roles) && u.roles.includes(r)); };
 const banOf = (u) => (u && u.ban && (!u.ban.until || u.ban.until > Date.now()) ? u.ban : null);
 const ipBanOf = (ip) => (ip ? (settings.ipBans || []).find((b) => b.ip === ip) || null : null);
 const fmtUntil = (t) => (t ? 'đến ' + new Date(t).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false }) : 'vĩnh viễn');
@@ -190,7 +191,7 @@ router.get('/me', (req, res) => {
   const b = banOf(u); if (b) return res.status(403).json({ error: banMsg(b), banned: true });
   touch(u.username, req.ip);
   ensureFashion(u);
-  res.json({ username: u.username, createdAt: u.createdAt || null, avatarVer: u.avatarVer || 0, bg: u.bg || null, admin: isAdmin(u.username), ...fashionOf(u) });
+  res.json({ username: u.username, createdAt: u.createdAt || null, avatarVer: u.avatarVer || 0, bg: u.bg || null, admin: isAdmin(u.username), roles: Array.isArray(u.roles) ? u.roles : [], ...fashionOf(u) });
 });
 
 // ---------- Thời trang: giới tính, màu da, đồ đã mua, đồ đang mặc ----------
@@ -288,5 +289,5 @@ module.exports = {
   router, verify, getProfile, ready,
   // cho trang quản trị (admin.js)
   users: () => users, settings: () => settings, saveUsers, saveSettings, keyOf, cleanName,
-  isOwner, isAdmin, banOf, ipBanOf, banMsg, touch, userOf,
+  isOwner, isAdmin, hasRole, banOf, ipBanOf, banMsg, touch, userOf,
 };

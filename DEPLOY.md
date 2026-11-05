@@ -83,6 +83,7 @@ Không có TURN, người dùng mạng 4G hoặc mạng công ty đôi khi khôn
 
 Trong trang quản trị:
 - **Tài khoản**: tìm theo tên / IP, xem lần cuối online, các acc dùng chung IP (dễ bắt acc clone), **khoá** (1 giờ → vĩnh viễn, ghi lý do, chặn luôn IP), **mở khoá**, **đá khỏi rạp**, **cấp quyền admin** cho người khác (chỉ chủ làm được).
+- **Vai trò DJ**: mở tài khoản → **🎧 Cấp vai trò DJ**. Người đó sẽ thấy nút **Bàn DJ** trong menu: bấm vào là nhân vật đi lên bàn DJ giữa sân khấu, mở bảng chà đĩa, đổi tốc độ / quay ngược / phanh video cho cả rạp, bắn còi hơi, drop, laser, nháy đèn... (quản trị cũng dùng được).
 - **Phòng**: xem ai đang ở phòng nào, bỏ qua video, xoá danh sách phát, đóng phòng riêng.
 - **Giao diện rạp**: đổi tên, bố cục rạp công cộng và **phong cách** rạp lớn (Huyền bí ác quỷ / Sang trọng / Vũ trụ / Anime hoa anh đào), người đang xem tự tải lại. Mỗi phong cách là 1 file trong `public/styles/`, thêm phong cách mới không cần sửa trang quản trị.
 - **Tổng quan**: số liệu, gửi thông báo cho mọi người, nhật ký ai đã làm gì.

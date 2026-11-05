@@ -39,7 +39,7 @@
   th { color: var(--muted); font-weight: 500; font-size: 12.5px; }
   tr.click { cursor: pointer; } tr.click:hover td { background: rgba(255,255,255,.025); }
   .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; margin-right: 4px; }
-  .t-on { background: #0d2a20; color: #7deabf; } .t-ban { background: #3a0b14; color: #ff9aa7; } .t-owner { background: #3a2a08; color: #ffd36b; } .t-admin { background: #22103a; color: #c9a2ff; }
+  .t-on { background: #0d2a20; color: #7deabf; } .t-ban { background: #3a0b14; color: #ff9aa7; } .t-owner { background: #3a2a08; color: #ffd36b; } .t-dj { background: #0b2a3a; color: #7fd8ff; } .t-admin { background: #22103a; color: #c9a2ff; }
   .muted { color: var(--muted); } .small { font-size: 12.5px; }
   .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
   .opt { border: 2px solid var(--line); border-radius: 12px; padding: 12px; cursor: pointer; background: #10070b; }
@@ -91,7 +91,7 @@
     <div class="card">
       <div class="row" style="margin-bottom:10px">
         <input id="uq" placeholder="Tìm tên hoặc IP…" style="flex:1;min-width:180px">
-        <select id="uf"><option value="all">Tất cả</option><option value="online">Đang online</option><option value="banned">Đang bị khoá</option><option value="new">Mới tạo 24h</option><option value="admin">Quản trị</option></select>
+        <select id="uf"><option value="all">Tất cả</option><option value="online">Đang online</option><option value="banned">Đang bị khoá</option><option value="new">Mới tạo 24h</option><option value="admin">Quản trị</option><option value="dj">DJ</option></select>
         <button class="b" id="ur">Làm mới</button>
       </div>
       <div class="small muted" id="ucount"></div>
@@ -170,7 +170,7 @@ async function loadOverview() {
 $('annSend').onclick = async () => { const text = $('annText').value.trim(); if (!text) return; if (await act('/announce', { text }, 'Đã gửi thông báo')) { $('annText').value = ''; loadOverview(); } };
 
 // ---- Tài khoản
-const tags = (u) => (u.role === 'owner' ? '<span class="tag t-owner">CHỦ</span>' : u.role === 'admin' ? '<span class="tag t-admin">ADMIN</span>' : '') + (u.ban ? '<span class="tag t-ban">KHOÁ</span>' : '') + (u.online ? '<span class="tag t-on">ONLINE</span>' : '');
+const tags = (u) => (u.role === 'owner' ? '<span class="tag t-owner">CHỦ</span>' : u.role === 'admin' ? '<span class="tag t-admin">ADMIN</span>' : '') + ((u.roles || []).includes('dj') ? '<span class="tag t-dj">DJ</span>' : '') + (u.ban ? '<span class="tag t-ban">KHOÁ</span>' : '') + (u.online ? '<span class="tag t-on">ONLINE</span>' : '');
 let uTimer;
 async function loadUsers() {
   const r = await api('/users?q=' + encodeURIComponent($('uq').value.trim()) + '&filter=' + $('uf').value);
@@ -207,6 +207,7 @@ async function openUser(name) {
     </div>`}
     <div class="row" style="justify-content:flex-end">
       ${!protectedU && u.online ? '<button class="b" id="dKick">Đá khỏi rạp</button>' : ''}
+      <button class="b" id="dDj">${(u.roles || []).includes('dj') ? 'Gỡ vai trò DJ' : '🎧 Cấp vai trò DJ'}</button>
       ${ME.owner && u.role !== 'owner' && !self ? `<button class="b" id="dRole">${u.role === 'admin' ? 'Gỡ quyền admin' : 'Cấp quyền admin'}</button>` : ''}
       ${u.ban ? (protectedU ? '' : '<button class="b g" id="dUnban">Mở khoá</button>') : (protectedU ? '' : '<button class="b d" id="dBan">Khoá tài khoản</button>')}
       <button class="b" id="dClose">Đóng</button>
@@ -220,6 +221,10 @@ async function openUser(name) {
   };
   if ($('dUnban')) $('dUnban').onclick = async () => { if (await act('/unban', { username: u.username }, 'Đã mở khoá')) done(); };
   if ($('dKick')) $('dKick').onclick = async () => { if (await act('/kick', { username: u.username }, 'Đã đá ' + u.username)) done(); };
+  $('dDj').onclick = async () => {
+    const on = !(u.roles || []).includes('dj');
+    if (await act('/djrole', { username: u.username, on }, on ? 'Đã cấp vai trò DJ cho ' + u.username : 'Đã gỡ vai trò DJ')) done();
+  };
   if ($('dRole')) $('dRole').onclick = async () => {
     const make = u.role !== 'admin';
     if (!confirm(make ? `Cấp quyền admin cho ${u.username}? Admin khoá / đá được người thường và đổi giao diện rạp.` : `Gỡ quyền admin của ${u.username}?`)) return;
