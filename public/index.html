@@ -612,6 +612,12 @@
   /* ----- Thanh menu phải: không bao giờ đè lên ô âm lượng (cuộn được khi màn hình thấp) ----- */
   #dock { max-height: calc(100vh - 80px - 92px); max-height: calc(100dvh - 80px - 92px); overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
   #dock::-webkit-scrollbar { display: none; }
+  .dtoggle { padding: 4px 2px !important; opacity: .75; } .dtoggle:hover { opacity: 1; }
+  .dtoggle .ico { transition: transform .2s; transform: rotate(180deg); }
+  #dock.collapsed .dbtn:not(.dtoggle) { display: none !important; }
+  #dock.collapsed .dtoggle .ico { transform: rotate(0deg); }
+  #dock.collapsed .dtoggle .tlbl { display: none; }
+  #dock.collapsed { width: auto; padding: 4px; }
   @media (max-height: 820px) and (min-width: 761px) {
     .dbtn { padding: 6px 2px; font-size: 11.5px; } .dbtn span.ic { margin-bottom: 2px; } .dbtn span.ic .ico { width: 20px; height: 20px; }
   }
@@ -636,6 +642,9 @@
       display: grid; grid-template-columns: repeat(auto-fit, minmax(62px, 1fr)); overflow: visible; }
     .dbtn { min-width: 0; padding: 5px 1px; font-size: 10.5px; line-height: 1.15; }
     .dbtn.hidden { display: none; }
+    .dtoggle { grid-column: 1 / -1; min-height: 0; padding: 1px 0 !important; } .dtoggle .ic { margin: 0 !important; } .dtoggle .tlbl { display: none; }
+    .dtoggle .ico { transform: rotate(0deg); } #dock.collapsed .dtoggle .ico { transform: rotate(180deg); }
+    #dock.collapsed { left: auto; display: block; padding: 2px; } #dock.collapsed .dtoggle { width: 44px; height: 30px; }
     .dbtn span.ic { margin-bottom: 2px; } .dbtn span.ic .ico { width: 20px; height: 20px; }
     .dbtn .badge { right: 4px; }
     /* góc nhìn + âm lượng nằm trên thanh menu */
@@ -851,6 +860,7 @@
 </div>
 
 <div class="hud glass" id="dock">
+  <button class="dbtn dtoggle" id="dockToggle" title="Thu gọn menu"><span class="ic"><svg class="ico" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span><span class="tlbl">Thu gọn</span></button>
   <button class="dbtn" id="dRooms"><span class="ic"><svg class="ico"><use href="#i-door"/></svg></span><span id="roomLbl">Phòng</span></button>
   <button class="dbtn" id="dSeat"><span class="ic"><svg class="ico"><use href="#i-seat"/></svg></span><span id="seatLbl">Đứng</span></button>
   <button class="dbtn" id="dWardrobe"><span class="ic"><svg class="ico"><use href="#i-shirt"/></svg></span>Tủ đồ</button>
