@@ -4155,9 +4155,18 @@ function makePeer(id) {
 }
 function dropPeer(id) { const p = peers[id]; if (!p) return; try { p.pc.close(); } catch {} p.audio.remove(); delete peers[id]; }
 async function startVoice() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)                 // trình duyệt trong app (Zalo, Facebook, Messenger…) hoặc trang không HTTPS
+    return toast(isSecureContext ? 'Trình duyệt này không hỗ trợ mic — hãy mở link bằng Chrome / Safari / Cốc Cốc (không mở trong Zalo, Facebook)' : 'Voice cần trang chạy HTTPS');
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-  } catch { return toast('Không mở được mic. Cần cấp quyền mic và chạy trên HTTPS hoặc localhost.'); }
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+      .catch((e) => (e && e.name === 'OverconstrainedError' ? navigator.mediaDevices.getUserMedia({ audio: true }) : Promise.reject(e)));
+  } catch (e) {
+    const n = e && e.name;
+    return toast(n === 'NotAllowedError' || n === 'SecurityError' ? 'Mic đang bị chặn — bấm biểu tượng bên trái thanh địa chỉ → Quyền → Micrô → Cho phép, rồi tải lại trang. Nếu vẫn bị: vào Cài đặt điện thoại → Ứng dụng → trình duyệt → Quyền → Micrô → Cho phép'
+      : n === 'NotFoundError' ? 'Không tìm thấy micrô trên thiết bị này'
+      : n === 'NotReadableError' || n === 'AbortError' ? 'Micrô đang bị ứng dụng khác dùng (cuộc gọi, ghi âm…) — tắt ứng dụng đó rồi thử lại'
+      : 'Không mở được mic (' + (n || 'lỗi không rõ') + ')');
+  }
   muted = false;
   socket.emit('voice:join', async (ids) => {
     for (const id of ids) {
