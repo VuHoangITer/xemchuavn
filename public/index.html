@@ -73,6 +73,7 @@
   .card.modal.people { width: min(760px, 100%); max-width: none; }
   .people-body { display: flex; gap: 14px; min-height: 380px; }
   .people-list { width: 280px; flex: none; display: flex; flex-direction: column; gap: 6px; max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+  .people-list > * { flex-shrink: 0; }   /* danh sách dài: không ép bẹp thẻ (thẻ có nameplate dùng overflow:hidden nên dễ bị co về 0) */
   .prow { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.03); cursor: pointer; text-align: left; color: var(--text); width: 100%; }
   .prow:hover { background: rgba(255,255,255,.07); } .prow.on { border-color: var(--accent); background: rgba(232,180,94,.1); }
   .prow .pa, .pv-av { width: 40px; height: 40px; border-radius: 50%; flex: none; background: #3a3530 center/cover no-repeat; display: grid; place-items: center; font-weight: 700; color: #f0d9a8; }
