@@ -4996,6 +4996,7 @@ const autoDJ = createAutoDJ({
   emit: (k, v) => socket && socket.emit('dj:fx', { k, v }),
   scratch: (v, i) => { socket && socket.emit('dj:fx', { k: 'scratch', v, deck: i }); scratchSound(v, vol); djFx.scratchUntil = performance.now() + 250; djFx.deckV[i] += v * 14; duckVideo(0.35, 160); },
   party: () => !!(cur && cur.party && cur.party.dj),
+  rate: () => (cur && cur.rate) || 1,
 });
 const auto = { on: false, token: -1, genre: null, tapped: false, taps: [] };
 function sendBeat(bpm, at) { if (socket) socket.emit('dj:fx', { k: 'beat', bpm, at }); }
@@ -5018,6 +5019,7 @@ function autoOnState(s, me) {
 }
 $('djAutoBtn').onclick = () => {
   auto.on = !auto.on; autoDJ.reset();
+  if (!auto.on && cur && (cur.rate || 1) !== 1) socket && socket.emit('dj:fx', { k: 'rate', v: 1 });   // tắt tự động → trả tốc độ về x1
   if (auto.on && cur && cur.current && !cur.djBeat && auto.genre) sendBeat(auto.genre.bpm, 0);
   socket && socket.emit('dj:fx', { k: 'auto', v: auto.on });
   toast(auto.on ? `🤖 Tự động DJ bật · ${auto.genre ? auto.genre.label : ''} — bấm "Bấm theo nhịp" 4 lần theo nhạc để khớp hơn` : 'Đã tắt tự động DJ');
