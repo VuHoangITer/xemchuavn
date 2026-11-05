@@ -2,11 +2,12 @@
 // app.js gọi: setupDJ(ctx) → trả về { sfx, scratchSound, panel }.
 // Không có file âm thanh có bản quyền: mọi tiếng (còi hơi, còi hú, trống, chà đĩa...) được tạo bằng sóng / tiếng ồn.
 
-let ac = null, master = null, noiseBuf = null;
+let ac = null, master = null, noiseBuf = null, analyser = null, abuf = null;
 function audio(volume) {
   if (!ac) {
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
     ac = new AC(); master = ac.createGain(); master.connect(ac.destination);
+    analyser = ac.createAnalyser(); analyser.fftSize = 512; abuf = new Float32Array(analyser.fftSize); master.connect(analyser);   // đo độ lớn tiếng hiệu ứng → loa nhảy theo
     noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
     const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   }
@@ -60,6 +61,14 @@ const SOUNDS = {
     osc('sawtooth', 165, 18, t, 0.95, 0.3, lp); osc('sawtooth', 247, 26, t, 0.95, 0.15, lp);
   },
 };
+// mức âm hiện tại của các tiếng hiệu ứng DJ (0..1), không phụ thuộc nút âm lượng của người xem
+export function level() {
+  if (!analyser) return 0;
+  analyser.getFloatTimeDomainData(abuf);
+  let sum = 0; for (let i = 0; i < abuf.length; i++) sum += abuf[i] * abuf[i];
+  const g = master.gain.value || 1;
+  return Math.min(1, (Math.sqrt(sum / abuf.length) / g) * 3.5);
+}
 export function sfx(name, volume) { if (!audio(volume) || !SOUNDS[name]) return; SOUNDS[name](ac.currentTime + 0.01); }
 // tiếng chà đĩa: v = tốc độ kéo (-1..1), dấu = chiều kéo
 export function scratchSound(v, volume) {

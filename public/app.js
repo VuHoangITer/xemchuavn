@@ -1,7 +1,7 @@
 // XEMCHUAVN - client
 // Cảnh 3D (Three.js) + video YouTube gắn lên màn hình rạp (CSS3D) + nhân vật có tên/bong bóng chat + voice WebRTC
 import * as THREE from 'three';
-import { sfx, scratchSound, buildPanel } from '/dj.js';   // bàn DJ: âm thanh hiệu ứng tự tổng hợp + bảng điều khiển
+import { sfx, scratchSound, buildPanel, level as djLevel } from '/dj.js';   // bàn DJ: âm thanh hiệu ứng tự tổng hợp + bảng điều khiển
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -850,6 +850,7 @@ const LENS_MATS = [];                                          // mặt đèn r�
 let BEAM_MAT2 = null;                                          // luồng đèn rọi nhóm 2 (khác màu nhóm 1)
 const MYST = TPLC.decor === 'cinema';   // rạp lớn: màu đèn rọi / mặt đèn lấy theo phong cách                       // rạp lớn: tông ác quỷ đỏ máu / tím trầm
 const LED_BASE = new THREE.Color(THEME.led), BEAM_BASE = new THREE.Color(MYST ? CT.beam : 0xffdca0), BEAM_BASE2 = new THREE.Color(MYST ? CT.beam2 : 0xffdca0), LENS_BASE = new THREE.Color(MYST ? CT.lens : 0xfff1d2), _pc = new THREE.Color();
+const SPEAKERS = [];                                         // 2 loa sân khấu (cảm nhận âm lượng khi có DJ)
 const MYSTIC_SPIN = [];                                      // vật thể xoay / trôi chậm (ấn chú, pha lê, bụi phép)
 // vật liệu cộng sáng, không ghi alpha → không che video phía sau canvas
 const ADD = { transparent: true, depthWrite: false, fog: false, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
@@ -1164,27 +1165,47 @@ if (TPLC.decor === 'cinema') {
   // Loa line-array 2 bên màn: thân bo vát, mặt lưới, 2 loa trầm có vòng sáng, loa treble họng kèn, cụm line-array treo phía trên
   const grille = (() => { const c = document.createElement('canvas'); c.width = 128; c.height = 256; const x = c.getContext('2d'); x.fillStyle = '#0a0305'; x.fillRect(0, 0, 128, 256); x.fillStyle = '#2a0e14';
     for (let yy = 4; yy < 256; yy += 8) for (let xx = (yy / 8) % 2 ? 8 : 4; xx < 128; xx += 8) { x.beginPath(); x.arc(xx, yy, 2.2, 0, Math.PI * 2); x.fill(); } const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 4); return t; })();
-  if (styleOpt.speakers !== false) for (const sx of [-1, 1]) {
+  // Loa nằm trong SPEAKERS: khi có DJ, loa đổi sang chế độ "cảm nhận âm lượng": cột đèn VU, màng loa bơm, thân loa nảy theo xung, vòng sóng dưới chân
+  for (const sx of [-1, 1]) {
     const g = new THREE.Group(); g.position.set(sx * (SCR_W / 2 + 2.4), STAGE_H, -9.6); g.rotation.y = -sx * 0.14; scene.add(g);
+    g.visible = styleOpt.speakers !== false;                                                                           // phong cách không có loa: chỉ hiện khi có DJ
     const cab = smat(styleOpt.cab || 0x120609, { roughness: 0.45, metalness: 0.35 }), metal = smat(styleOpt.metal || 0x3a1a22, { metalness: 0.8, roughness: 0.3 });
-    rb(3.0, 0.5, 2.6, styleOpt.cab || 0x1c0b11, 0, 0.25, 0, g, 0.1, { metalness: 0.4 });                                          // đế
+    rb(3.0, 0.5, 2.6, styleOpt.cab || 0x1c0b11, 0, 0.25, 0, g, 0.1, { metalness: 0.4 });                                          // đế (đứng yên)
     const strip = new THREE.Mesh(new THREE.BoxGeometry(3.02, 0.05, 2.62), tealLed); strip.position.y = 0.52; g.add(strip);
-    const body = new THREE.Mesh(new RoundedBoxGeometry(2.5, 8.2, 2.1, 4, 0.28), cab); body.position.y = 4.65; g.add(body);
-    const face = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 7.7), new THREE.MeshStandardMaterial({ map: grille, roughness: 0.9, metalness: 0.1 })); face.position.set(0, 4.65, 1.06); g.add(face);
-    for (const sx2 of [-1, 1]) { const edge = new THREE.Mesh(new THREE.BoxGeometry(0.05, 7.9, 0.05), violet); edge.position.set(sx2 * 1.26, 4.65, 1.02); g.add(edge); }   // viền sáng 2 cạnh
+    const up = new THREE.Group(); up.position.y = 0.55; g.add(up);                                                     // thân loa: nảy lên theo xung
+    const Y = (y) => y - 0.55;
+    const body = new THREE.Mesh(new RoundedBoxGeometry(2.5, 8.2, 2.1, 4, 0.28), cab); body.position.y = Y(4.65); up.add(body);
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 7.7), new THREE.MeshStandardMaterial({ map: grille, roughness: 0.9, metalness: 0.1 })); face.position.set(0, Y(4.65), 1.06); up.add(face);
+    const edges = [];
+    for (const sx2 of [-1, 1]) { const edge = new THREE.Mesh(new THREE.BoxGeometry(0.05, 7.9, 0.05), violet); edge.position.set(sx2 * 1.26, Y(4.65), 1.02); up.add(edge); edges.push(edge); }   // viền sáng 2 cạnh
+    const woofers = [];
     for (const y of [2.2, 4.4]) {                                                                                      // 2 loa trầm
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.88, 0.1, 10, 36), metal); ring.position.set(0, y, 1.1); g.add(ring);
-      const halo = new THREE.Mesh(new THREE.TorusGeometry(0.98, 0.025, 6, 48), tealLed); halo.position.set(0, y, 1.12); g.add(halo);
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.82, 0.35, 36, 1, true), smat(0x08090d, { roughness: 0.95, side: THREE.DoubleSide })); cone.rotation.x = -Math.PI / 2; cone.position.set(0, y, 1.0); g.add(cone);
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 10), metal); cap.position.set(0, y, 0.98); cap.scale.z = 0.5; g.add(cap);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.88, 0.1, 10, 36), metal); ring.position.set(0, Y(y), 1.1); up.add(ring);
+      const halo = new THREE.Mesh(new THREE.TorusGeometry(0.98, 0.025, 6, 48), tealLed); halo.position.set(0, Y(y), 1.12); up.add(halo);
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.82, 0.35, 36, 1, true), smat(0x08090d, { roughness: 0.95, side: THREE.DoubleSide })); cone.rotation.x = -Math.PI / 2; cone.position.set(0, Y(y), 1.0); up.add(cone);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 10), metal); cap.position.set(0, Y(y), 0.98); cap.scale.z = 0.5; up.add(cap);
+      woofers.push({ halo, cone, cap });
     }
-    const horn = new THREE.Mesh(new RoundedBoxGeometry(1.5, 0.75, 0.3, 3, 0.12), metal); horn.position.set(0, 6.3, 1.1); g.add(horn);   // treble họng kèn
-    const throat = new THREE.Mesh(new RoundedBoxGeometry(1.2, 0.5, 0.2, 3, 0.1), smat(0x050608)); throat.position.set(0, 6.3, 1.2); g.add(throat);
-    const logo = new THREE.Mesh(new THREE.CircleGeometry(0.22, 24), violet); logo.position.set(0, 7.75, 1.08); g.add(logo);
+    const horn = new THREE.Mesh(new RoundedBoxGeometry(1.5, 0.75, 0.3, 3, 0.12), metal); horn.position.set(0, Y(6.3), 1.1); up.add(horn);   // treble họng kèn
+    const throat = new THREE.Mesh(new RoundedBoxGeometry(1.2, 0.5, 0.2, 3, 0.1), smat(0x050608)); throat.position.set(0, Y(6.3), 1.2); up.add(throat);
+    const logo = new THREE.Mesh(new THREE.CircleGeometry(0.22, 24), violet); logo.position.set(0, Y(7.75), 1.08); up.add(logo);
+    // cột đèn VU 2 cạnh (chỉ hiện khi có DJ): xanh → vàng → đỏ, sáng theo mức âm
+    const vu = new THREE.Group(); vu.visible = false; up.add(vu); const segs = [];
+    const VU_N = 16;
+    for (const sx2 of [-1, 1]) for (let i = 0; i < VU_N; i++) {
+      const col = new THREE.Color(i < VU_N * 0.55 ? 0x2bff88 : i < VU_N * 0.82 ? 0xffd23f : 0xff2a3d);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.34, 0.05), new THREE.MeshBasicMaterial({ color: col.clone().multiplyScalar(0.12) }));
+      m.position.set(sx2 * 1.17, Y(1.05 + i * 0.46), 1.1); vu.add(m); segs.push({ m, col, i });
+    }
+    const top = new THREE.Mesh(new THREE.CircleGeometry(1.4, 32), new THREE.MeshBasicMaterial({ color: CT.a, opacity: 0, transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor }));
+    top.position.set(0, Y(8.9), 0.2); up.add(top);                                                                    // loé sáng trên nóc loa khi xung mạnh
+    const wave = new THREE.Mesh(new THREE.RingGeometry(1.3, 1.6, 48), new THREE.MeshBasicMaterial({ color: CT.a, opacity: 0, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor }));
+    wave.rotation.x = -Math.PI / 2; wave.position.y = 0.06; g.add(wave);                                             // vòng sóng lan ra dưới chân
     const arr = new THREE.Group(); arr.position.set(0, 13.2, 0.4); g.add(arr);                                          // cụm line-array treo cong chữ J
     for (let k = 0; k < 5; k++) { const m = new THREE.Mesh(new RoundedBoxGeometry(2.4, 0.62, 1.4, 3, 0.1), cab); m.position.set(0, -k * 0.66, k * k * 0.035); m.rotation.x = k * 0.07; arr.add(m);
       const l = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.05, 0.02), k % 2 ? violet : tealLed); l.position.set(0, -k * 0.66, 0.71 + k * k * 0.035); l.rotation.x = k * 0.07; arr.add(l); }
     for (const sx2 of [-1, 1]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 4, 4), mat(0x222228)); w.position.set(sx2 * 0.9, 2.1, 0); arr.add(w); }
+    SPEAKERS.push({ g, up, woofers, edges, vu, segs, VU_N, top, wave, arr, base: styleOpt.speakers !== false, waveT: 1, sx });
   }
 
   // Quả cầu disco trên trần (xoay chậm)
@@ -4815,6 +4836,38 @@ if (DJ_IDX >= 0) {
   MYSTIC_SPIN.push(djBooth);
 }
 
+// ---- loa cảm nhận âm lượng (khi có DJ)
+// YouTube không cho đọc âm thanh video → video: nhảy theo nhịp giả lập (theo tốc độ phát); tiếng hiệu ứng DJ: đo thật bằng analyser
+const spk = { lvl: 0, prev: 0, obj: new THREE.Object3D() };
+spk.obj.userData.update = (dt, t) => {
+  if (!SPEAKERS.length) return;
+  const on = !!(cur && cur.dj);
+  let L = 0;
+  if (on) {
+    const playing = !!(cur.current && !cur.paused) && !djFx.cutOn && performance.now() > djFx.brakeUntil - 1000;
+    const beat = t * BPM / 60 * (cur.rate || 1), k = Math.exp(-(beat % 1) * 6), hh = Math.exp(-((beat + 0.5) % 1) * 9);
+    const bar = Math.floor(beat / 4), vari = 0.72 + 0.28 * Math.abs(Math.sin(bar * 1.73 + Math.floor(beat) * 0.61));
+    const fake = playing ? Math.min(1, (0.9 * k + 0.25 * hh) * vari) : 0;
+    L = Math.max(fake, djLevel());
+  }
+  spk.lvl += (L - spk.lvl) * Math.min(1, dt * (L > spk.lvl ? 35 : 7));                    // lên nhanh, xuống chậm như đồng hồ VU
+  const v = spk.lvl, peak = v > 0.62 && spk.prev <= 0.62; spk.prev = v;
+  for (const S of SPEAKERS) {
+    S.g.visible = S.base || on;
+    S.vu.visible = on; S.edges.forEach((e) => (e.visible = !on));
+    S.up.position.y = 0.55 + v * 0.65; S.up.scale.y = 1 + v * 0.07; S.up.scale.x = S.up.scale.z = 1 - v * 0.02;   // thân loa nảy lên theo xung
+    for (const w of S.woofers) { w.cone.position.z = 1.0 + v * 0.2; w.cap.position.z = 0.98 + v * 0.26; w.cap.scale.set(1 + v * 0.25, 1 + v * 0.25, 0.5 + v * 0.4); w.halo.scale.setScalar(1 + v * 0.16); }
+    const lit = Math.round(v * S.VU_N * 1.05);
+    for (const sg of S.segs) sg.m.material.color.copy(sg.col).multiplyScalar(sg.i < lit ? 1 : 0.12);
+    S.top.material.opacity = Math.max(0, v - 0.45) * 1.4;
+    S.arr.rotation.x = Math.sin(t * 2 + S.sx) * 0.02 + v * 0.04;
+    if (on && peak) S.waveT = 0;                                                            // xung mạnh → bắn vòng sóng
+    if (S.waveT < 1) { S.waveT = Math.min(1, S.waveT + dt * 1.6); S.wave.scale.setScalar(1 + S.waveT * 3.2); S.wave.material.opacity = (1 - S.waveT) * 0.75; }
+    else S.wave.material.opacity = 0;
+  }
+};
+MYSTIC_SPIN.push(spk.obj);
+
 // dáng DJ: tay đặt trên 2 đĩa, chà thì tay phải lắc, đầu gật theo nhịp; lúc drop giơ tay trái; thỉnh thoảng 1 tay giữ tai nghe
 function djStep(a, t, y0) {
   const g = a.g, now = performance.now(), beat = t * BPM / 60, k = Math.exp(-(beat % 1) * 5);
@@ -4912,4 +4965,5 @@ function onDJFx(d) {
     case 'rate': if (!amDJ()) toast(`🎧 DJ đổi tốc độ: x${d.v}`); break;
   }
 }
+
 
