@@ -4937,12 +4937,34 @@ function duckVideo(f, ms) {                                      // hạ nhỏ t
   try { media.volume(Math.round(vol * f)); } catch {}
   clearTimeout(djFx.duckT); djFx.duckT = setTimeout(() => { if (!djFx.cutOn) applyVolume(); }, ms);
 }
-function djFlash(kind) {
-  const el = $('djFlash');
-  if (kind === 'strobe') { el.className = 'strobe'; clearTimeout(el._t); el._t = setTimeout(() => (el.className = ''), 1500); }
-  else if (kind === 'blackout') { el.className = 'black'; clearTimeout(el._t); el._t = setTimeout(() => (el.className = ''), 1700); }
+function djFlash(kind, ms) {
+  const el = $('djFlash'), on = (cls, d) => { el.className = ''; void el.offsetWidth; el.className = cls; clearTimeout(el._t); el._t = setTimeout(() => (el.className = ''), d); };
+  if (kind === 'strobe') on('strobe', ms || 1500);
+  else if (kind === 'blackout' || kind === 'black') on('black', ms || 1700);
+  else if (kind === 'flash') on('flash', ms || 220);                             // 1 lần chớp trắng rồi tắt dần
   else if (kind === 'laser') djFx.laserUntil = performance.now() + 7000;
   else if (kind === 'color') { LED_BASE.setHSL(Math.random(), 1, 0.55); }
+}
+// tắt / mở tiếng video (tự mở lại sau 4 giây cho an toàn)
+function djCut(on) {
+  djFx.cutOn = on; clearTimeout(djFx.cutT);
+  if (on) { try { media && media.volume(0); } catch {} djFx.cutT = setTimeout(() => { djFx.cutOn = false; applyVolume(); }, 4000); }
+  else applyVolume();
+}
+// combo liền mạch theo nhịp (B = số giây của 1 phách): tắt tiếng + tắt đèn + nháy nối nhau
+function runCombo(name, B) {
+  const at = (beats, fn) => setTimeout(fn, beats * B * 1000), now = performance.now();
+  if (name === 'drop') {                                         // phách cuối: im + tối om → đúng phách drop: nổ trầm, nhạc vào, nháy 2 phách
+    djCut(true); djFlash('black', B * 1000 + 80);
+    at(1, () => { djCut(false); sfx('boom', vol); djFlash('strobe', B * 2000); djFx.pumpUntil = performance.now() + 2200; });
+  } else if (name === 'chop') {                                  // chặt nhịp: 2 phách móc đơn, im+tối / tiếng+flash xen kẽ
+    for (let i = 0; i < 4; i++) at(i * 0.5, () => { const mute = i % 2 === 0; djCut(mute); djFlash(mute ? 'black' : 'flash', B * 480); });
+    at(2, () => djCut(false));
+    djFx.scratchUntil = now + B * 2000;
+  } else if (name === 'flash') {                                 // flash liền: nháy 1 phách → tối nửa phách → nháy 1 phách
+    djFlash('strobe', B * 1000); at(1, () => djFlash('black', B * 500)); at(1.5, () => djFlash('strobe', B * 1000));
+    djFx.pumpUntil = now + B * 2500;
+  }
 }
 function djStutter() {                                           // lặp lại 1 nhịp ngắn 4 lần rồi chạy tiếp
   if (!media || !cur || !cur.current || cur.current.live || (media !== YTA && media !== FileA)) return;
@@ -4970,11 +4992,8 @@ function onDJFx(d) {
       else if (d.v === 'airhorn' || d.v === 'yeah' || d.v === 'siren') djFx.pumpUntil = now + 1500;
       break;
     case 'light': djFlash(d.v); break;
-    case 'cut':
-      djFx.cutOn = !!d.v; clearTimeout(djFx.cutT);
-      if (djFx.cutOn) { try { media && media.volume(0); } catch {} djFx.cutT = setTimeout(() => { djFx.cutOn = false; applyVolume(); }, 4000); }
-      else applyVolume();
-      break;
+    case 'cut': djCut(!!d.v); break;
+    case 'combo': runCombo(d.v, 60 / (d.bpm || BPM)); break;
     case 'stutter': djStutter(); break;
     case 'rewind': sfx('rewind', vol); djFx.deckV[0] = djFx.deckV[1] = -30; quiet(1200); break;
     case 'brake': sfx('brake', vol); djFx.brakeUntil = now + 2100; djBrakeMedia(); break;

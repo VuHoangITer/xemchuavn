@@ -689,7 +689,8 @@
   /* ===== Bàn DJ ===== */
   #djFlash { position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0; transition: opacity .25s; }
   #djFlash.strobe { background: #fff; animation: djStrobe .11s steps(2, jump-none) infinite; }
-  #djFlash.black { background: #000; opacity: .82; }
+  #djFlash.black { background: #000; opacity: .86; transition: none; }
+  #djFlash.flash { background: #fff; opacity: .7; transition: none; }
   @keyframes djStrobe { 0% { opacity: .5; } 100% { opacity: 0; } }
   #djBadge { position: fixed; top: 54px; left: 50%; transform: translateX(-50%); z-index: 6; padding: 4px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700;
     background: linear-gradient(135deg, rgba(255,42,61,.85), rgba(155,48,255,.85)); color: #fff; box-shadow: 0 4px 18px rgba(155,48,255,.35); pointer-events: none; white-space: nowrap; }
@@ -703,6 +704,7 @@
   .djBtn.on { background: linear-gradient(135deg, #ff2a3d, #9b30ff); border-color: transparent; color: #fff; font-weight: 700; }
   .djBtn.danger { background: rgba(255,60,80,.18); border-color: rgba(255,60,80,.4); }
   .djBtn.fx { flex: 1; }
+  .djBtn.combo { flex: 1; background: linear-gradient(135deg, rgba(255,42,61,.22), rgba(155,48,255,.22)); border-color: rgba(255,90,140,.4); font-weight: 600; }
   .djBody { display: flex; gap: 12px; align-items: center; }
   .djMid { flex: 1; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
   .djRow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
@@ -1039,6 +1041,9 @@
         <button class="djPad" data-pad="drop">💥<span>Drop</span></button><button class="djPad" data-pad="yeah">🙌<span>Ê ê!</span></button>
         <button class="djPad" data-pad="kick">🥁<span>Kick</span></button><button class="djPad" data-pad="snare">🪘<span>Snare</span></button>
         <button class="djPad" data-pad="clap">👏<span>Vỗ tay</span></button><button class="djPad" data-pad="zap">⚡<span>Zap</span></button>
+      </div>
+      <div class="djRow">
+        <button class="djBtn combo" data-combo="drop" title="Phách cuối im + tối, đúng phách drop nổ + nháy">💥 Combo drop</button><button class="djBtn combo" data-combo="chop" title="Chặt nhịp: im/tối – tiếng/flash xen kẽ 2 phách">🔪 Chặt nhịp</button><button class="djBtn combo" data-combo="flash" title="Nháy – tối – nháy liền mạch">⚡ Flash liền</button>
       </div>
       <div class="djRow">
         <button class="djBtn" data-fx="party">🪩 Đèn bar</button><button class="djBtn" data-light="strobe">✨ Nháy</button><button class="djBtn" data-light="laser">🔦 Laser</button><button class="djBtn" data-light="blackout">🌑 Tắt đèn</button><button class="djBtn" data-light="color">🎨 Đổi màu</button>

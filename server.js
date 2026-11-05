@@ -574,6 +574,9 @@ io.on('connection', (socket) => {
         room.djBeat = { bpm, at: Math.round(at * 1000) / 1000 }; broadcast(room); return;
       }
       case 'auto': room.djAuto = !!d.v; broadcast(room); return;
+      case 'combo':                                                // combo tắt tiếng + tắt đèn + nháy liền mạch theo nhịp
+        if (['drop', 'chop', 'flash'].includes(d.v)) io.to(room.id).emit('dj:fx', { k: 'combo', v: d.v, bpm: (room.djBeat ? room.djBeat.bpm : 124) * (room.rate || 1) });
+        return;
       case 'light': if (DJ_LIGHTS.has(d.v)) io.to(room.id).emit('dj:fx', { k: 'light', v: d.v }); return;
       case 'cut': io.to(room.id).emit('dj:fx', { k: 'cut', v: !!d.v }); return;   // tắt tiếng video trong lúc giữ nút
       case 'stutter': io.to(room.id).emit('dj:fx', { k: 'stutter' }); return;     // lặp nhịp ngắn (mỗi máy tự làm rồi đồng bộ lại)

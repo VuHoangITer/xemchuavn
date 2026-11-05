@@ -140,10 +140,13 @@ export function createAutoDJ({ emit, scratch, party, rate }) {
     const sec = (PLAN[E] || PLAN[1])[((P % 4) + 4) % 4], rnd = Math.random();
     const speedUp = E >= 1 && lvl >= 2;                                       // tăng tốc đoạn dồn (mức vừa / quẩy)
     if (pos === 0) {
-      if (sec === 'break' && E === 0 && lvl >= 3) { emit('rate', 0.75); slowP = P; }   // bài chậm: đoạn nghỉ chậm lại cho "phiêu"
+      if (sec === 'break' && E === 0 && lvl >= 3) { emit('rate', 0.75); slowP = P; }
+      if (sec === 'groove' && E >= 1 && lvl >= 2 && P % 2 === 1) emit('combo', 'flash');   // đầu đoạn thường: flash liền   // bài chậm: đoạn nghỉ chậm lại cho "phiêu"
       else if (slowP !== P) normal();                                         // hết đoạn chậm / tăng tốc → về x1
       if (sec === 'drop') {
-        emit('pad', 'boom'); emit('light', 'strobe'); if (lvl >= 2) emit('light', 'laser');
+        const fromBuild = (PLAN[E] || PLAN[1])[(((P - 1) % 4) + 4) % 4] === 'build';
+        if (!fromBuild) { emit('pad', 'boom'); emit('light', 'strobe'); }       // vào từ đoạn dồn thì combo drop đã lo phần nổ + nháy
+        if (lvl >= 2) emit('light', 'laser');
         if (!party()) emit('party');
         if (lvl >= 2 && E >= 2 && rnd < 0.6) later(450, () => emit('pad', 'airhorn'));
       } else if (sec === 'break') { emit('light', 'blackout'); if (party()) emit('party'); }
@@ -154,7 +157,7 @@ export function createAutoDJ({ emit, scratch, party, rate }) {
       if (pos === 8 && E >= 2 && lvl >= 2) emit('pad', 'siren');
       if (pos === 16) emit('pad', 'riser');                                  // rít dâng 16 phách → drop
       if (pos === 24 && lvl >= 2) { emit('pad', 'roll'); if (speedUp) emit('rate', 1.25); }   // trống dồn + tăng tốc 8 phách cuối
-      if (pos === 31) emit('light', 'blackout');
+      if (pos === 31) emit('combo', 'drop');                                 // im + tối 1 phách → drop nổ + nháy (liền mạch)
       if (pos % 8 === 0) emit('light', 'color');
       return;
     }
@@ -162,6 +165,8 @@ export function createAutoDJ({ emit, scratch, party, rate }) {
     if (sec === 'drop') {
       if (pos === 16 && lvl >= 2) { emit('light', 'strobe'); if (lvl >= 3 && rnd < 0.5) emit('pad', 'airhorn'); }
       if (pos === 8 && lvl >= 3 && rnd < 0.4) emit('pad', 'yeah');
+      if (pos === 14 && (lvl >= 3 || (lvl === 2 && P % 2 === 0))) { emit('combo', 'chop'); return; }   // chặt nhịp phách 14–16 → phách 16 nháy tiếp
+      if (pos === 30 && lvl >= 3 && P % 2 === 1) { emit('combo', 'chop'); return; }                    // cuối đoạn: xen kẽ chặt nhịp / chà đĩa
       if (pos === 28 && lvl >= 3 && E >= 2 && P % 4 === 3 && stutterP !== P) { stutterP = P; emit('stutter'); }
     }
     if (pos === 30 && lvl >= 2 && (sec === 'drop' || E >= 1) && rnd < 0.7) flurry();
@@ -197,6 +202,7 @@ export function buildPanel(ctx) {
   root.querySelectorAll('[data-light]').forEach((b) => b.onclick = () => emit('light', b.dataset.light));
   root.querySelectorAll('[data-rate]').forEach((b) => b.onclick = () => emit('rate', Number(b.dataset.rate)));
   root.querySelectorAll('[data-fx]').forEach((b) => b.onclick = () => emit(b.dataset.fx));
+  root.querySelectorAll('[data-combo]').forEach((b) => b.onclick = () => emit('combo', b.dataset.combo));
   const cut = root.querySelector('[data-cut]');                  // giữ nút CUT = tắt tiếng video
   const cutOn = (e) => { e.preventDefault(); cut.classList.add('on'); emit('cut', true); };
   const cutOff = () => { if (!cut.classList.contains('on')) return; cut.classList.remove('on'); emit('cut', false); };
