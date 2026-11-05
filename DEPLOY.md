@@ -1,4 +1,4 @@
-# Đưa Rạp Chung lên mạng miễn phí (Render + MongoDB Atlas)
+# Đưa Hoàng Cinema lên mạng miễn phí (Render + MongoDB Atlas)
 
 Tổng thời gian: khoảng 20–30 phút. Cần: 1 email, không cần thẻ ngân hàng.
 
@@ -45,7 +45,7 @@ Thấy `Xong: N tài khoản, M ảnh đã lên MongoDB` là được. Khoá đ�
    ```bash
    git init
    git add .
-   git commit -m "Rạp Chung"
+   git commit -m "Hoàng Cinema"
    git branch -M main
    git remote add origin https://github.com/TEN_GITHUB/xemchuavn.git
    git push -u origin main

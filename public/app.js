@@ -1,4 +1,4 @@
-// RẠP CHUNG - client
+// HOÀNG CINEMA - client
 // Cảnh 3D (Three.js) + video YouTube gắn lên màn hình rạp (CSS3D) + nhân vật có tên/bong bóng chat + voice WebRTC
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -8,6 +8,8 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 
 const $ = (id) => document.getElementById(id);
 // Danh mục thời trang dùng chung với server (public/catalog.json)
+// PWA: đăng ký service worker (cài app lên màn hình chính)
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('/sw.js').catch(() => {});
 const CATALOG = await fetch('/catalog.json').then((r) => r.json());
 const ITEM = new Map(CATALOG.items.map((it) => [it.id, it]));
 const SLOT_NAME = Object.fromEntries(CATALOG.slots.map((s) => [s.id, s.name]));

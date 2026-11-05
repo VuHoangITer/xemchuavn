@@ -1,4 +1,4 @@
-# RẠP CHUNG — xem YouTube chung (MVP v2)
+# HOÀNG CINEMA — rạp phim 3D xem chung
 
 ## Chạy
     npm install
