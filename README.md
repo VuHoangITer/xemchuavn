@@ -1,4 +1,4 @@
-# HOÀNG CINEMA — rạp phim 3D xem chung
+# XEMCHUAVN — rạp phim 3D xem chung
 
 ## Chạy
     npm install

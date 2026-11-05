@@ -1,4 +1,4 @@
-// HOÀNG CINEMA - server
+// XEMCHUAVN - server
 // Node.js + Express + Socket.IO
 // - Đăng nhập bắt buộc (xem auth.js)
 // - Mỗi phòng có 152 chỗ; ai vào sẽ được xếp 1 chỗ ngẫu nhiên, đổi chỗ qua bảng chọn ghế.
@@ -562,5 +562,5 @@ setInterval(() => {
 }, SYNC_INTERVAL_MS);
 
 // chờ nạp xong dữ liệu (file / MongoDB) rồi mới mở cổng
-auth.ready.then(() => server.listen(PORT, () => console.log(`HOÀNG CINEMA chạy tại http://localhost:${PORT}`)))
+auth.ready.then(() => server.listen(PORT, () => console.log(`XEMCHUAVN chạy tại http://localhost:${PORT}`)))
   .catch((e) => { console.error('Không kết nối được nơi lưu dữ liệu:', e.message); process.exit(1); });

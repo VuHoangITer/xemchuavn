@@ -1,6 +1,6 @@
-// Hoàng Cinema - service worker: cho phép cài app (PWA) + mở nhanh / chạy vỏ giao diện khi mạng chập chờn.
+// XemChuaVN - service worker: cho phép cài app (PWA) + mở nhanh / chạy vỏ giao diện khi mạng chập chờn.
 // Chiến lược: mạng trước, lỗi mạng thì lấy bản đã lưu. Không đụng vào /api, /socket.io, video, trang ngoài.
-const CACHE = 'hoang-cinema-v1';
+const CACHE = 'xemchuavn-v1';
 const SHELL = ['/', '/app.js', '/catalog.json', '/manifest.webmanifest', '/favicon.svg', '/icons/icon-192.png', '/icons/icon-512.png',
   '/vendor/three/build/three.module.js'];
 

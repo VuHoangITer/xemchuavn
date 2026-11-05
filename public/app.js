@@ -1,4 +1,4 @@
-// HOÀNG CINEMA - client
+// XEMCHUAVN - client
 // Cảnh 3D (Three.js) + video YouTube gắn lên màn hình rạp (CSS3D) + nhân vật có tên/bong bóng chat + voice WebRTC
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
