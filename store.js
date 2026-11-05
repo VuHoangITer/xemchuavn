@@ -71,6 +71,12 @@ function saveUsers(users) {
   return saving;
 }
 
+// ---- xoá hẳn 1 tài khoản khỏi database (chế độ file: saveUsers ghi lại cả danh sách nên chỉ cần xoá khỏi bộ nhớ)
+async function deleteUser(key) {
+  lastSaved.delete(key);
+  if (colUsers) await colUsers.deleteOne({ _id: key });
+}
+
 // ---- ảnh: { mime, data }
 async function putFile(name, mime, buf) {
   if (colFiles) return colFiles.replaceOne({ _id: name }, { _id: name, mime, data: buf, at: new Date() }, { upsert: true });
@@ -98,4 +104,4 @@ async function saveSettings(obj) {
   await fs.promises.rename(SETTINGS_FILE + '.tmp', SETTINGS_FILE);
 }
 
-module.exports = { init, loadSecret, saveUsers, putFile, getFile, delFile, loadSettings, saveSettings, usingMongo: () => !!colUsers };
+module.exports = { init, loadSecret, saveUsers, deleteUser, putFile, getFile, delFile, loadSettings, saveSettings, usingMongo: () => !!colUsers };

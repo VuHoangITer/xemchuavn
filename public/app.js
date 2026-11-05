@@ -842,7 +842,8 @@ function buildThemeDecor() {
 // ---- Nội thất: tấm ốp đứng màu than + nẹp đèn LED vàng, đèn rọi gắn tường, loa đứng, bảng tên, quả cầu disco
 let discoBall = null;
 // ---- Chế độ đèn bar (đủ 1/3 người trong phòng vote): quả cầu disco bắn laser nhiều màu + đèn màu nháy
-let partyOn = false, partyMine = false, partyFade = 0;      // partyFade: 0 → 1 mượt khi bật / tắt
+let partyOn = false, partyMine = false, partyFade = 0;
+var djLight = 0;                                               // 0 → 1 khi có DJ (đèn giật theo nhịp)      // partyFade: 0 → 1 mượt khi bật / tắt
 const PARTY_COLORS = [0xff3d8b, 0x2ff0c8, 0x4f9dff, 0xffd23a, 0xa66bff, 0x6dff5a];
 const BPM = 124;                                               // nhịp nhạc giả lập để đèn chạy theo
 const PARTY_TINT = [];                                         // vật liệu đèn LED (nẹp tường, mép bậc) đổi màu theo nhịp
@@ -943,10 +944,22 @@ function updateParty(t, dt) {
   HEMI.intensity = THEME.hemi[2] - 0.3 * f;
   for (let k = 0; k < PARTY_TINT.length; k++) PARTY_TINT[k].color.copy(LED_BASE).lerp(_pc.setHex(palette(k)).multiplyScalar(0.55 + 0.45 * kick), f);
 
+  // DJ đang chơi: đèn giật theo mức âm (cùng mức với loa: nhịp video + tiếng hiệu ứng DJ)
+  djLight += ((cur && cur.dj ? 1 : 0) - djLight) * Math.min(1, dt * 3);
+  const dl = djLight, L = (typeof djFx === 'object' && djFx) ? djFx.level || 0 : 0;
+  if (dl > 0.01) {
+    const djBar = Math.floor(t * BPM / 60 * ((cur && cur.rate) || 1) / 4);
+    HEMI.intensity -= dl * (0.24 - 0.2 * L);                                 // phòng tối bớt, chớp sáng mỗi nhịp
+    for (let k = 0; k < PARTY_TINT.length; k++) {
+      _pc.setHex((djBar + k) % 2 ? CT.a : CT.b).multiplyScalar(0.12 + 1.15 * L);
+      PARTY_TINT[k].color.lerp(_pc, dl * (1 - 0.5 * f));
+    }
+  }
+
   // quả cầu: quay, lấp lánh
   if (discoBall) {
     discoBall.material.emissive.setRGB(1, 1, 1);
-    discoBall.material.emissiveIntensity = f * (0.12 + 0.25 * kick);
+    discoBall.material.emissiveIntensity = f * (0.12 + 0.25 * kick) + dl * 0.35 * L;
     lasers.position.copy(discoBall.position);
   }
 
@@ -1004,7 +1017,7 @@ function updateParty(t, dt) {
   }
 
   // đèn màu trong phòng nháy theo nhịp
-  partyLights.forEach((l, k) => { l.intensity = f * 55 * (0.3 + 0.7 * kick); l.color.setHex(palette(k * 2)); });   // hắt màu nhẹ, không nhuộm cả phòng
+  partyLights.forEach((l, k) => { l.intensity = Math.max(f * 55 * (0.3 + 0.7 * kick), dl * 70 * L); l.color.setHex(f > 0.5 ? palette(k * 2) : (k % 2 ? CT.a : CT.b)); });   // hắt màu nhẹ, không nhuộm cả phòng
 
   // đèn rọi 2 bên: cùng nhịp, quét đối xứng, 2 nhóm 2 màu, chớp sáng đầu mỗi phách
   const swing = Math.sin(beat * Math.PI / 2), tilt = Math.cos(beat * Math.PI / 4);
@@ -1012,15 +1025,16 @@ function updateParty(t, dt) {
     const u = b.userData, sx = u.baseZ > 0 ? -1 : 1;
     const calmZ = u.baseZ + Math.sin(t * 0.35 + u.phase) * 0.12, calmX = -0.45 + Math.sin(t * 0.27 + u.phase * 1.3) * 0.18;
     const partyZ = u.baseZ - sx * swing * 0.38, partyX = -0.45 + tilt * 0.4;
-    b.rotation.z = calmZ + (partyZ - calmZ) * f; b.rotation.x = calmX + (partyX - calmX) * f;
+    const w = Math.max(f, dl * 0.85);                                        // có DJ: đèn rọi quét như lúc bật đèn bar
+    b.rotation.z = calmZ + (partyZ - calmZ) * w; b.rotation.x = calmX + (partyX - calmX) * w;
   }
   if (BEAM_MAT) {
     BEAM_MAT.color.copy(BEAM_BASE).lerp(_pc.setHex(palette(0)), f);
     if (BEAM_MAT2) BEAM_MAT2.color.copy(BEAM_BASE2).lerp(_pc.setHex(palette(3)), f);
-    const op = 0.12 + f * (0.06 + 0.22 * kick);
+    const op = Math.min(0.55, 0.12 + f * (0.06 + 0.22 * kick) + dl * (0.04 + 0.32 * L));
     BEAM_MAT.opacity = op; if (BEAM_MAT2) BEAM_MAT2.opacity = op;
   }
-  LENS_MATS.forEach((m, k) => m.color.copy(LENS_BASE).lerp(_pc.setHex(palette(k % 2 ? 3 : 0)), f));
+  LENS_MATS.forEach((m, k) => m.color.copy(LENS_BASE).lerp(_pc.setHex(palette(k % 2 ? 3 : 0)), Math.max(f, dl * L)));
 }
 // Đèn bar chỉ bật 1 phút: nút hiện đếm ngược
 let partyEndAt = 0;
@@ -4851,7 +4865,7 @@ spk.obj.userData.update = (dt, t) => {
     L = Math.max(fake, djLevel());
   }
   spk.lvl += (L - spk.lvl) * Math.min(1, dt * (L > spk.lvl ? 35 : 7));                    // lên nhanh, xuống chậm như đồng hồ VU
-  const v = spk.lvl, peak = v > 0.62 && spk.prev <= 0.62; spk.prev = v;
+  const v = spk.lvl, peak = v > 0.62 && spk.prev <= 0.62; spk.prev = v; djFx.level = v;
   for (const S of SPEAKERS) {
     S.g.visible = S.base || on;
     S.vu.visible = on; S.edges.forEach((e) => (e.visible = !on));

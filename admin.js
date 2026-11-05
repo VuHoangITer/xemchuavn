@@ -38,9 +38,12 @@ module.exports = function setupAdmin(ctx) {
     if (r === 'admin' && !req.owner) return 'Chỉ chủ mới xử lý được admin khác';
     return null;
   };
+  const DAY = 864e5;
   const view = (u) => {
-    const ban = auth.banOf(u);
+    const ban = auth.banOf(u), online = socketsOf(u.username).length > 0;
+    const seen = u.lastSeen || u.createdAt || 0;
     return {
+      offDays: online ? 0 : seen ? Math.floor((Date.now() - seen) / DAY) : null, seenGuess: !u.lastSeen,   // số ngày không vào (chưa ghi nhận lần vào → tính từ lúc tạo)
       username: u.username, createdAt: u.createdAt || null, lastSeen: u.lastSeen || null, lastIp: u.lastIp || null,
       gender: u.gender || null, role: role(u.username), roles: Array.isArray(u.roles) ? u.roles : [], room: roomOf(u.username), online: socketsOf(u.username).length > 0,
       ban: ban ? { until: ban.until || 0, reason: ban.reason || '', by: ban.by || '', at: ban.at || 0 } : null,
@@ -74,6 +77,8 @@ module.exports = function setupAdmin(ctx) {
     else if (f === 'admin') list = list.filter((u) => u.role !== 'user');
     else if (f === 'dj') list = list.filter((u) => u.roles.includes('dj'));
     else if (f === 'new') list = list.filter((u) => u.createdAt > Date.now() - 864e5);
+    else if (/^off\d+$/.test(f)) { const d = Number(f.slice(3)); list = list.filter((u) => !u.online && u.offDays != null && u.offDays >= d); }
+    if (/^off\d+$/.test(f)) { list.sort((a, b) => b.offDays - a.offDays); return res.json({ total: list.length, list: list.slice(0, 300) }); }   // offline lâu nhất lên đầu
     list.sort((a, b) => (b.online - a.online) || ((b.lastSeen || b.createdAt || 0) - (a.lastSeen || a.createdAt || 0)));
     res.json({ total: list.length, list: list.slice(0, 300) });
   });
@@ -108,6 +113,18 @@ module.exports = function setupAdmin(ctx) {
     const st = S(); const before = (st.ipBans || []).length;
     st.ipBans = (st.ipBans || []).filter((b) => K(b.user || '') !== K(u.username));
     log(req.admin, `Mở khoá ${u.username}${before !== st.ipBans.length ? ' (gỡ chặn IP kèm theo)' : ''}`);
+    res.json({ ok: true });
+  });
+  router.post('/delete', async (req, res) => {                // chỉ chủ: xoá hẳn tài khoản (phải gõ lại đúng tên để xác nhận)
+    if (!req.owner) return res.status(403).json({ error: 'Chỉ chủ mới xoá được tài khoản' });
+    const u = auth.users()[K(req.body.username)];
+    if (!u) return res.status(404).json({ error: 'Không có tài khoản này' });
+    const why = canTouch(req, u.username); if (why) return res.status(403).json({ error: why });
+    if (K(req.body.confirm || '') !== K(u.username)) return res.status(400).json({ error: 'Gõ lại đúng tên tài khoản để xác nhận xoá' });
+    const name = u.username, off = view(u).offDays;
+    kickSockets(name, 'banned', { message: 'Tài khoản này đã bị xoá' });
+    await auth.deleteUser(name);
+    log(req.admin, `Xoá tài khoản ${name}${off != null ? ` (offline ${off} ngày)` : ''}`);
     res.json({ ok: true });
   });
   router.post('/kick', (req, res) => {

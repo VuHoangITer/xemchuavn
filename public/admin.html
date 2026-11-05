@@ -91,11 +91,11 @@
     <div class="card">
       <div class="row" style="margin-bottom:10px">
         <input id="uq" placeholder="Tìm tên hoặc IP…" style="flex:1;min-width:180px">
-        <select id="uf"><option value="all">Tất cả</option><option value="online">Đang online</option><option value="banned">Đang bị khoá</option><option value="new">Mới tạo 24h</option><option value="admin">Quản trị</option><option value="dj">DJ</option></select>
+        <select id="uf"><option value="all">Tất cả</option><option value="online">Đang online</option><option value="banned">Đang bị khoá</option><option value="new">Mới tạo 24h</option><option value="off7">Offline ≥ 7 ngày</option><option value="off30">Offline ≥ 30 ngày</option><option value="off90">Offline ≥ 90 ngày</option><option value="off180">Offline ≥ 180 ngày</option><option value="admin">Quản trị</option><option value="dj">DJ</option></select>
         <button class="b" id="ur">Làm mới</button>
       </div>
       <div class="small muted" id="ucount"></div>
-      <div style="overflow-x:auto"><table><thead><tr><th>Tài khoản</th><th>Trạng thái</th><th class="hide-sm">Lần cuối</th><th class="hide-sm">IP gần nhất</th><th class="hide-sm">Tạo lúc</th></tr></thead><tbody id="ulist"></tbody></table></div>
+      <div style="overflow-x:auto"><table><thead><tr><th>Tài khoản</th><th>Trạng thái</th><th class="hide-sm">Offline</th><th class="hide-sm">IP gần nhất</th><th class="hide-sm">Tạo lúc</th></tr></thead><tbody id="ulist"></tbody></table></div>
     </div>
   </section>
 
@@ -171,6 +171,10 @@ $('annSend').onclick = async () => { const text = $('annText').value.trim(); if 
 
 // ---- Tài khoản
 const tags = (u) => (u.role === 'owner' ? '<span class="tag t-owner">CHỦ</span>' : u.role === 'admin' ? '<span class="tag t-admin">ADMIN</span>' : '') + ((u.roles || []).includes('dj') ? '<span class="tag t-dj">DJ</span>' : '') + (u.ban ? '<span class="tag t-ban">KHOÁ</span>' : '') + (u.online ? '<span class="tag t-on">ONLINE</span>' : '');
+// số ngày offline: tô màu cho dễ thấy acc bỏ lâu
+const offTxt = (u) => u.online ? '<span style="color:#7deabf">đang online</span>'
+  : u.offDays == null ? '<span class="muted">—</span>'
+  : `<b style="color:${u.offDays >= 90 ? '#ff8a97' : u.offDays >= 30 ? '#ffd36b' : 'inherit'}">${u.offDays === 0 ? 'hôm nay' : u.offDays + ' ngày'}</b>${u.seenGuess ? '<span class="muted small" title="Chưa ghi nhận lần vào, tính từ lúc tạo"> *</span>' : ''}`;
 let uTimer;
 async function loadUsers() {
   const r = await api('/users?q=' + encodeURIComponent($('uq').value.trim()) + '&filter=' + $('uf').value);
@@ -178,7 +182,7 @@ async function loadUsers() {
   $('ulist').innerHTML = r.list.map((u) => `<tr class="click" data-u="${esc(u.username)}">
     <td><b>${esc(u.username)}</b> ${u.gender === 'f' ? '<span class="muted">♀</span>' : u.gender === 'm' ? '<span class="muted">♂</span>' : ''}</td>
     <td>${tags(u) || '<span class="muted small">offline</span>'}${u.room ? `<span class="small muted"> · ${esc(u.room)}</span>` : ''}</td>
-    <td class="hide-sm">${u.online ? 'đang online' : ago(u.lastSeen)}</td><td class="hide-sm small">${esc(u.lastIp || '—')}</td><td class="hide-sm small">${dt(u.createdAt)}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Không có ai</td></tr>';
+    <td class="hide-sm">${offTxt(u)}</td><td class="hide-sm small">${esc(u.lastIp || '—')}</td><td class="hide-sm small">${dt(u.createdAt)}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Không có ai</td></tr>';
   $('ulist').querySelectorAll('tr.click').forEach((tr) => tr.onclick = () => openUser(tr.dataset.u));
 }
 $('uq').oninput = () => { clearTimeout(uTimer); uTimer = setTimeout(loadUsers, 250); };
@@ -191,7 +195,7 @@ async function openUser(name) {
   d.innerHTML = `<h3>${esc(u.username)} ${tags(u)}</h3>
     <div class="kv">
       <div>Tạo lúc</div><div>${dt(u.createdAt)}</div>
-      <div>Lần cuối online</div><div>${u.online ? 'đang online' + (u.room ? ' · phòng ' + esc(u.room) : '') : dt(u.lastSeen)}</div>
+      <div>Lần cuối online</div><div>${u.online ? 'đang online' + (u.room ? ' · phòng ' + esc(u.room) : '') : (u.lastSeen ? dt(u.lastSeen) : 'chưa ghi nhận') + (u.offDays != null && !u.online ? ` · <b>offline ${u.offDays} ngày</b>${u.seenGuess ? ' (tính từ lúc tạo)' : ''}` : '')}</div>
       <div>IP đăng ký</div><div>${esc(u.regIp || '—')}</div>
       <div>IP gần đây</div><div>${u.ips.length ? u.ips.map((ip) => esc(ip) + (u.ipBanned.includes(ip) ? ' <span class="tag t-ban">CHẶN</span>' : '')).join('<br>') : '—'}</div>
       <div>Acc chung IP</div><div>${u.sameIp.length ? u.sameIp.map((n) => `<a href="#" data-open="${esc(n)}">${esc(n)}</a>`).join(', ') : '<span class="muted">không có</span>'}</div>
@@ -210,6 +214,7 @@ async function openUser(name) {
       <button class="b" id="dDj">${(u.roles || []).includes('dj') ? 'Gỡ vai trò DJ' : '🎧 Cấp vai trò DJ'}</button>
       ${ME.owner && u.role !== 'owner' && !self ? `<button class="b" id="dRole">${u.role === 'admin' ? 'Gỡ quyền admin' : 'Cấp quyền admin'}</button>` : ''}
       ${u.ban ? (protectedU ? '' : '<button class="b g" id="dUnban">Mở khoá</button>') : (protectedU ? '' : '<button class="b d" id="dBan">Khoá tài khoản</button>')}
+      ${ME.owner && !protectedU ? '<button class="b d" id="dDel">🗑 Xoá tài khoản</button>' : ''}
       <button class="b" id="dClose">Đóng</button>
     </div>`;
   const done = () => { d.close(); loadUsers(); };
@@ -221,6 +226,11 @@ async function openUser(name) {
   };
   if ($('dUnban')) $('dUnban').onclick = async () => { if (await act('/unban', { username: u.username }, 'Đã mở khoá')) done(); };
   if ($('dKick')) $('dKick').onclick = async () => { if (await act('/kick', { username: u.username }, 'Đã đá ' + u.username)) done(); };
+  if ($('dDel')) $('dDel').onclick = async () => {
+    const typed = prompt(`XOÁ VĨNH VIỄN tài khoản "${u.username}"?\nMất hết đồ, ảnh đại diện, ảnh nền; không khôi phục được.\n\nGõ lại đúng tên tài khoản để xác nhận:`);
+    if (typed == null) return;
+    if (await act('/delete', { username: u.username, confirm: typed }, 'Đã xoá tài khoản ' + u.username)) done();
+  };
   $('dDj').onclick = async () => {
     const on = !(u.roles || []).includes('dj');
     if (await act('/djrole', { username: u.username, on }, on ? 'Đã cấp vai trò DJ cho ' + u.username : 'Đã gỡ vai trò DJ')) done();

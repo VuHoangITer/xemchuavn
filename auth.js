@@ -278,6 +278,17 @@ router.post('/password', async (req, res) => {
   res.json({ token: sign(u.username) });                      // token mới; các phiên đăng nhập khác bị đăng xuất
 });
 
+// Xoá hẳn tài khoản (trang quản trị): dữ liệu, ảnh đại diện, ảnh nền; tên được giải phóng để đăng ký lại
+async function deleteUser(name) {
+  const k = keyOf(name), u = users[k]; if (!u) return false;
+  delete users[k];
+  settings.admins = (settings.admins || []).filter((x) => x !== k);
+  await store.deleteUser(k);
+  await Promise.all([store.delFile(avatarKey(u)), store.delFile(bgKey(u))].map((p) => p.catch(() => {})));
+  await saveUsers(); await saveSettings();
+  return true;
+}
+
 // Cho server.js: trang phục + phiên bản ảnh đại diện của 1 người
 function getProfile(name) {
   const u = users[keyOf(name)]; if (!u) return { look: null, av: 0 };
@@ -289,5 +300,5 @@ module.exports = {
   router, verify, getProfile, ready,
   // cho trang quản trị (admin.js)
   users: () => users, settings: () => settings, saveUsers, saveSettings, keyOf, cleanName,
-  isOwner, isAdmin, hasRole, banOf, ipBanOf, banMsg, touch, userOf,
+  isOwner, isAdmin, hasRole, deleteUser, banOf, ipBanOf, banMsg, touch, userOf,
 };
