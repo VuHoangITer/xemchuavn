@@ -316,20 +316,27 @@ const TPL_ID = (() => {
 })();
 const TPLC = ROOM_TEMPLATES[TPL_ID];
 const ROW_DEFS = TPLC.rows;
-// ---- Bảng màu rạp lớn (chọn trong trang quản trị; tên phải khớp CINEMA_THEMES ở server.js)
-// a/a2 = màu nhấn chính, b/b2 = màu phụ, grad = nền cờ phướn, surf = sàn / tường / trần / đèn LED
-const CINEMA_THEMES = {
+// ---- Phong cách rạp lớn (chọn trong trang quản trị; id phải khớp CINEMA_STYLES ở server.js)
+// Mỗi phong cách = bảng màu (a/a2 nhấn chính, b/b2 nhấn phụ, surf = sàn/tường/trần/đèn LED, seats = màu ghế) + phần trang trí riêng.
+// 'demon' dựng ngay trong file này; các phong cách khác nằm ở public/styles/<id>.js (chỉ tải khi được chọn).
+// Thêm phong cách mới: tạo public/styles/<id>.js + thêm 1 dòng ở đây + 1 dòng ở server.js.
+const CINEMA_STYLES = {
   demon: { a: 0xff2a3d, a2: 0xff2238, b: 0x8a2be2, b2: 0x9b30ff, lens: 0xffc2c8, crystal: 0xff7a86, beam: 0xff3a4a, beam2: 0x9b40ff, banner: 0xd6c0c8,
     grad: ['#12040a', '#1c0726', '#240612', '#070205'],
     surf: { floor: 0x120709, wall: 0x0e0508, ceil: 0x070204, back: 0x10060a, front: 0x0c0407, step: 0x1d0a10, aisle: 0x260c14, led: 0xff2238, hemi: [0xd8a0b4, 0x12050a, 0.58], glow: 380, frame: 0xff2238, frameW: 0.12 } },
-  mystic: { a: 0x3fe6d0, a2: 0x2fd8c4, b: 0x7b5cff, b2: 0xb98cff, lens: 0xd8fbff, crystal: 0x9ff7ff, beam: 0x7ff2ff, beam2: 0xb98cff, banner: 0xc8dcff,
-    grad: ['#040812', '#0b0a26', '#061520', '#020307'],
-    surf: { floor: 0x0c0f19, wall: 0x0a0c16, ceil: 0x05060d, back: 0x0b0d18, front: 0x090b14, step: 0x121729, aisle: 0x171c33, led: 0x3fe6d0, hemi: [0x9fb6ff, 0x0a0a16, 0.6], glow: 380, frame: 0x3fe6d0, frameW: 0.12 } },
-  gold: { a: 0xe8b45e, a2: 0xc9a24a, b: 0xb3262e, b2: 0xd8434b, lens: 0xfff1d2, crystal: 0xffe2a0, beam: 0xffdca0, beam2: 0xffc890, banner: 0xe8dccb,
-    grad: ['#0d0905', '#1a0d0a', '#1d1408', '#050302'],
-    surf: { floor: 0x18181b, wall: 0x111113, ceil: 0x0b0b0d, back: 0x131315, front: 0x111114, step: 0x1d1d21, aisle: 0x26262b, led: 0xe8b45e, hemi: [0xb4b0bc, 0x141416, 0.62], glow: 380, frame: 0xc9a24a, frameW: 0.16 } },
+  luxury: { a: 0xffb347, a2: 0xffa531, b: 0xffd9a0, b2: 0xe8b45e, beam: 0xffdca0, beam2: 0xffdca0, lens: 0xfff1d2,
+    surf: { floor: 0x16120f, wall: 0x15110e, ceil: 0x120e0b, back: 0x15110e, front: 0x0d0b0a, step: 0x1f1a16, aisle: 0x2a231d, led: 0xffa531, hemi: [0xffe2c0, 0x15100b, 0.62], glow: 300, frame: 0x0b0a09, frameW: 0.5 },
+    seats: { regular: 0x2b2826, leather: 0x262321, couple: 0x2b2522, bed: 0x34302d } },
+  cosmic: { a: 0x7a5cff, a2: 0x5f8bff, b: 0x3fd6ff, b2: 0xc061ff, beam: 0xa08cff, beam2: 0x7fd9ff, lens: 0xdcd6ff,
+    surf: { floor: 0x0a0c16, wall: 0x0b0d1a, ceil: 0x04050b, back: 0x0b0d1a, front: 0x07080f, step: 0x11142a, aisle: 0x151a36, led: 0x7a5cff, hemi: [0xaab4ff, 0x0a0a18, 0.6], glow: 360, frame: 0x2a1e0e, frameW: 0.3 },
+    seats: { regular: 0x9a2716, leather: 0xa82d18, couple: 0xb3341c, bed: 0x8a2416 } },
+  anime: { a: 0xff7ab8, a2: 0xff8fc8, b: 0xffd166, b2: 0xb28dff, beam: 0xffc6e2, beam2: 0xd9c2ff, lens: 0xfff0f7,
+    surf: { floor: 0x2a2236, wall: 0x2b2140, ceil: 0x1a1430, back: 0x2b2140, front: 0x1c1628, step: 0x352a45, aisle: 0x45365c, led: 0xff8fc8, hemi: [0xffdcef, 0x1c1230, 0.78], glow: 300, frame: 0xb82632, frameW: 0.45 },
+    seats: { regular: 0xf0a3c0, leather: 0xe58bb0, couple: 0xd96aa0, bed: 0xf4e3ec } },
 };
-const CT = CINEMA_THEMES[SITE.cinemaTheme] || CINEMA_THEMES.demon;
+const CS_ID = CINEMA_STYLES[SITE.cinemaTheme] ? SITE.cinemaTheme : 'demon';
+const CT = CINEMA_STYLES[CS_ID];
+if (TPLC.decor === 'cinema' && CT.seats) for (const [k, c] of Object.entries(CT.seats)) if (SEAT_TYPES[k]) SEAT_TYPES[k].color = c;   // màu ghế theo phong cách
 const cssHex = (n) => '#' + n.toString(16).padStart(6, '0');
 const AISLE_W = TPLC.aisleW, AISLE_X = TPLC.aisleX, BLOCK_IN = AISLE_X + AISLE_W / 2;   // mép trong 2 khối bên
 const SIDE_X0 = TPLC.sideX0;                                             // ngoài mép này là lối đi sát tường
@@ -836,7 +843,7 @@ const BPM = 124;                                               // nhịp nhạc 
 const PARTY_TINT = [];                                         // vật liệu đèn LED (nẹp tường, mép bậc) đổi màu theo nhịp
 const LENS_MATS = [];                                          // mặt đèn rọi 2 bên
 let BEAM_MAT2 = null;                                          // luồng đèn rọi nhóm 2 (khác màu nhóm 1)
-const MYST = TPLC.decor === 'cinema';                       // rạp lớn: tông ác quỷ đỏ máu / tím trầm
+const MYST = TPLC.decor === 'cinema';   // rạp lớn: màu đèn rọi / mặt đèn lấy theo phong cách                       // rạp lớn: tông ác quỷ đỏ máu / tím trầm
 const LED_BASE = new THREE.Color(THEME.led), BEAM_BASE = new THREE.Color(MYST ? CT.beam : 0xffdca0), BEAM_BASE2 = new THREE.Color(MYST ? CT.beam2 : 0xffdca0), LENS_BASE = new THREE.Color(MYST ? CT.lens : 0xfff1d2), _pc = new THREE.Color();
 const MYSTIC_SPIN = [];                                      // vật thể xoay / trôi chậm (ấn chú, pha lê, bụi phép)
 // vật liệu cộng sáng, không ghi alpha → không che video phía sau canvas
@@ -1042,8 +1049,18 @@ if (TPLC.decor === 'cinema') {
   // ===== Rạp lớn phong cách ÁC QUỶ: băng rôn phù văn phát sáng đỏ máu / tím trầm, ấn chú trên trần, đèn pha lê, loa line-array =====
   const glow = (color) => new THREE.MeshBasicMaterial({ color });
   BEAM_MAT.color.copy(BEAM_BASE); BEAM_MAT2 = BEAM_MAT.clone(); BEAM_MAT2.color.copy(BEAM_BASE2);
-  const tealLed = glow(CT.a2); PARTY_TINT.push(tealLed);
+  const tealLed = glow(CT.a2); PARTY_TINT.push(tealLed);   // 2 màu đèn nhấn của phong cách (loa, viền...)
   const violet = glow(CT.b);
+  let styleOpt = {};
+  if (CS_ID !== 'demon') {
+    // phong cách khác: tải module trang trí riêng
+    const ADD = { transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor };
+    const ctx = { THREE, scene, RoundedBoxGeometry, rb, box, mat, smat, glow, floorY, cssHex, accA: tealLed, accB: violet, ADD,
+      HALL_X, HALL_H, HALL_FRONT, HALL_BACK, HALL_D, HALL_ZC, SCR_W, SCR_H, SCR_Y, SCR_Z, STAGE_H, STAGE_Z0, STAGE_Z1,
+      AISLE_X, AISLE_W, SIDE_X0, LAND_Z0, TOP_H, TPLC, CS: CT, SPIN: MYSTIC_SPIN, PARTY_TINT };
+    try { const mod = await import('/styles/' + CS_ID + '.js'); styleOpt = (await mod.default(ctx)) || {}; }
+    catch (e) { console.error('Không tải được phong cách rạp', CS_ID, e); }
+  } else {
   const RUNES = 'ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ';
   // vẽ 1 ấn chú tròn (vòng tròn đồng tâm + đa giác sao + phù văn quanh vòng)
   const sigil = (x, cx, cy, R, col, n = 6, seed = 1) => {
@@ -1135,14 +1152,15 @@ if (TPLC.decor === 'cinema') {
   }
   // viền neon mép sân khấu
   { const e = new THREE.Mesh(new THREE.BoxGeometry(SCR_W + 6, 0.06, 0.06), tealLed); e.position.set(0, STAGE_H + 0.03, TPLC.stage.z1 + 0.02); scene.add(e); }
+  }   // hết phong cách ác quỷ
 
   // Loa line-array 2 bên màn: thân bo vát, mặt lưới, 2 loa trầm có vòng sáng, loa treble họng kèn, cụm line-array treo phía trên
   const grille = (() => { const c = document.createElement('canvas'); c.width = 128; c.height = 256; const x = c.getContext('2d'); x.fillStyle = '#0a0305'; x.fillRect(0, 0, 128, 256); x.fillStyle = '#2a0e14';
     for (let yy = 4; yy < 256; yy += 8) for (let xx = (yy / 8) % 2 ? 8 : 4; xx < 128; xx += 8) { x.beginPath(); x.arc(xx, yy, 2.2, 0, Math.PI * 2); x.fill(); } const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 4); return t; })();
-  for (const sx of [-1, 1]) {
+  if (styleOpt.speakers !== false) for (const sx of [-1, 1]) {
     const g = new THREE.Group(); g.position.set(sx * (SCR_W / 2 + 2.4), STAGE_H, -9.6); g.rotation.y = -sx * 0.14; scene.add(g);
-    const cab = smat(0x120609, { roughness: 0.45, metalness: 0.35 }), metal = smat(0x3a1a22, { metalness: 0.8, roughness: 0.3 });
-    rb(3.0, 0.5, 2.6, 0x1c0b11, 0, 0.25, 0, g, 0.1, { metalness: 0.4 });                                          // đế
+    const cab = smat(styleOpt.cab || 0x120609, { roughness: 0.45, metalness: 0.35 }), metal = smat(styleOpt.metal || 0x3a1a22, { metalness: 0.8, roughness: 0.3 });
+    rb(3.0, 0.5, 2.6, styleOpt.cab || 0x1c0b11, 0, 0.25, 0, g, 0.1, { metalness: 0.4 });                                          // đế
     const strip = new THREE.Mesh(new THREE.BoxGeometry(3.02, 0.05, 2.62), tealLed); strip.position.y = 0.52; g.add(strip);
     const body = new THREE.Mesh(new RoundedBoxGeometry(2.5, 8.2, 2.1, 4, 0.28), cab); body.position.y = 4.65; g.add(body);
     const face = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 7.7), new THREE.MeshStandardMaterial({ map: grille, roughness: 0.9, metalness: 0.1 })); face.position.set(0, 4.65, 1.06); g.add(face);
@@ -3106,7 +3124,8 @@ function frame() {
   updateHallCutaway();
   if (discoBall) discoBall.rotation.y += dt * (partyOn ? 1.6 : 0.35);
   for (const o of MYSTIC_SPIN) {                              // ấn chú xoay, pha lê nổi, bụi phép trôi
-    if (o.userData.motes) { o.visible = camMode === 'audience' || camMode === 'stage'; o.rotation.y += dt * 0.01; o.position.y = Math.sin(performance.now() / 4000) * 0.6; }
+    if (o.userData.update) o.userData.update(dt, t);            // hiệu ứng riêng của phong cách (cánh hoa rơi, hành tinh trôi...)
+    else if (o.userData.motes) { o.visible = camMode === 'audience' || camMode === 'stage'; o.rotation.y += dt * 0.01; o.position.y = Math.sin(performance.now() / 4000) * 0.6; }
     else if (o.userData.bob) { o.rotation.y += dt * o.userData.spin; o.position.y = o.userData.bob + Math.sin(performance.now() / 700 + o.parent.position.x) * 0.12; }
     else o.rotation.z += dt * o.userData.spin;
   }

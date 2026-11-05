@@ -185,7 +185,7 @@ module.exports = function setupAdmin(ctx) {
       if (n !== rooms.get('main').name) { st.mainName = n; rooms.get('main').name = n; changes.push('tên rạp → ' + n); }
     }
     if (b.cinemaTheme != null && CINEMA_THEMES[b.cinemaTheme] && b.cinemaTheme !== (st.cinemaTheme || 'demon')) {
-      st.cinemaTheme = b.cinemaTheme; changes.push('màu rạp lớn → ' + CINEMA_THEMES[b.cinemaTheme]);
+      st.cinemaTheme = b.cinemaTheme; changes.push('phong cách rạp lớn → ' + CINEMA_THEMES[b.cinemaTheme]);
       io.emit('server:reload', { what: 'theme', message: 'Quản trị viên vừa đổi giao diện rạp, đang tải lại…' });
     }
     if (b.mainTpl != null && TEMPLATES[b.mainTpl] && b.mainTpl !== rooms.get('main').tpl) {

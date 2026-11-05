@@ -117,8 +117,8 @@
       <div class="grid2" id="tplList"></div>
     </div>
     <div class="card">
-      <h2>Màu rạp lớn</h2>
-      <div class="small muted" style="margin-bottom:10px">Áp dụng cho mọi phòng dùng bố cục "Rạp lớn" (rạp công cộng + phòng riêng loại Rạp lớn). Người đang xem sẽ tự tải lại.</div>
+      <h2>Phong cách rạp lớn</h2>
+      <div class="small muted" style="margin-bottom:10px">Đổi toàn bộ trang trí: tường, trần, sân khấu, đèn, màu ghế. Áp dụng cho mọi phòng dùng bố cục "Rạp lớn" (rạp công cộng + phòng riêng loại Rạp lớn). Người đang xem sẽ tự tải lại.</div>
       <div class="grid2" id="themeList"></div>
     </div>
   </section>
@@ -251,12 +251,13 @@ async function loadRooms() {
 $('rr').onclick = loadRooms;
 
 // ---- Giao diện rạp
-const SW = { demon: ['#ff2a3d', '#9b30ff', '#120709'], mystic: ['#3fe6d0', '#b98cff', '#0c0f19'], gold: ['#e8b45e', '#b3262e', '#18181b'] };
+const SW = { demon: ['#ff2a3d', '#9b30ff', '#120709'], luxury: ['#ffb347', '#6e4829', '#1a1817'], cosmic: ['#7a5cff', '#3fd6ff', '#9a2716'], anime: ['#ff9cc2', '#b82632', '#3d2a72'] };
+const DESC = { demon: 'Phù văn đỏ máu, ấn chú xoay, pha lê, đèn rọi', luxury: 'Gỗ nan, LED hổ phách, vòm trần, bảng logo XCVN', cosmic: 'Vách đá tinh vân, hologram, hành tinh, ghế dung nham', anime: 'Tranh trời hoàng hôn, torii, đèn lồng, hoa anh đào rơi' };
 async function loadLook() {
   const s = await api('/settings');
   $('mainName').value = s.mainName;
   $('tplList').innerHTML = s.templates.map((t) => `<div class="opt ${t.id === s.mainTpl ? 'on' : ''}" data-tpl="${esc(t.id)}"><b>${esc(t.name)}</b><span class="small muted">${t.seats} ghế${t.id === s.mainTpl ? ' · đang dùng' : ''}</span></div>`).join('');
-  $('themeList').innerHTML = s.themes.map((t) => `<div class="opt ${t.id === s.cinemaTheme ? 'on' : ''}" data-theme="${esc(t.id)}"><b>${esc(t.name)}</b><span class="small muted">${t.id === s.cinemaTheme ? 'đang dùng' : 'bấm để dùng'}</span><div class="sw">${(SW[t.id] || []).map((c) => `<i style="background:${c}"></i>`).join('')}</div></div>`).join('');
+  $('themeList').innerHTML = s.themes.map((t) => `<div class="opt ${t.id === s.cinemaTheme ? 'on' : ''}" data-theme="${esc(t.id)}"><b>${esc(t.name)}</b><span class="small muted">${esc(DESC[t.id] || '')}${t.id === s.cinemaTheme ? ' · <b style="display:inline;color:#ff8a97">đang dùng</b>' : ''}</span><div class="sw">${(SW[t.id] || []).map((c) => `<i style="background:${c}"></i>`).join('')}</div></div>`).join('');
   $('tplList').querySelectorAll('[data-tpl]').forEach((o) => o.onclick = async () => {
     if (o.classList.contains('on')) return;
     if (!confirm(`Đổi rạp công cộng sang "${o.querySelector('b').textContent}"? Người đang trong rạp sẽ tự tải lại trang.`)) return;
@@ -264,7 +265,7 @@ async function loadLook() {
   });
   $('themeList').querySelectorAll('[data-theme]').forEach((o) => o.onclick = async () => {
     if (o.classList.contains('on')) return;
-    if (await act('/settings', { cinemaTheme: o.dataset.theme }, 'Đã đổi màu rạp')) loadLook();
+    if (await act('/settings', { cinemaTheme: o.dataset.theme }, 'Đã đổi phong cách rạp')) loadLook();
   });
 }
 $('saveName').onclick = () => act('/settings', { mainName: $('mainName').value }, 'Đã lưu tên rạp');

@@ -23,8 +23,8 @@ const TEMPLATES = {
   room10:  { name: 'Phòng VIP 10 chỗ',    seats: 10,  dance: 0, cap: 10 },
   couple2: { name: 'Phòng đôi',           seats: 2,   dance: 0, cap: 2 },
 };
-// Bảng màu cho rạp lớn (phải khớp CINEMA_THEMES ở public/app.js) — đổi trong trang quản trị
-const CINEMA_THEMES = { demon: 'Ác quỷ đỏ tím', mystic: 'Huyền bí xanh ngọc', gold: 'Cổ điển vàng son' };
+// Phong cách rạp lớn (phải khớp CINEMA_STYLES ở public/app.js; trang trí ở public/styles/<id>.js) — đổi trong trang quản trị
+const CINEMA_THEMES = { demon: 'Huyền bí ác quỷ', luxury: 'Sang trọng', cosmic: 'Vũ trụ', anime: 'Anime hoa anh đào' };
 const DANCE = 5;                // 5 chỗ nhảy trên bục: chỉ số 152..156 (không xếp ngẫu nhiên vào đây)
 const PARTY_RATIO = 1 / 3;      // đủ 1/3 người trong phòng vote thì bật đèn bar
 const MENU_IDS = new Set(['popcorn', 'popcorn_cheese', 'hotdog', 'fries', 'nachos', 'soda', 'milktea', 'juice', 'coffee', 'water']);   // 4 khu: ghế thường, ghế da, ghế đôi, giường nằm (bố cục ở public/app.js)
