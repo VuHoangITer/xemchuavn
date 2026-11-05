@@ -11,7 +11,7 @@ const { MongoClient } = require('mongodb');
 const URI = process.env.MONGODB_URI;
 if (!URI) { console.error('Thiếu biến MONGODB_URI'); process.exit(1); }
 const DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
-const keyOf = (name) => String(name).toLocaleLowerCase('vi');
+const keyOf = (name) => String(name || '').normalize('NFC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('vi');   // giống auth.js
 const sha = (s) => crypto.createHash('sha1').update(s).digest('hex');
 
 (async () => {

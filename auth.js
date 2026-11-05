@@ -19,7 +19,9 @@ let SECRET = '';
 const ready = (async () => { users = await store.init(); SECRET = await store.loadSecret(); })();
 const saveUsers = () => store.saveUsers(users);
 
-const keyOf = (name) => String(name).toLocaleLowerCase('vi');
+// chuẩn hoá tên: dạng Unicode NFC (bộ gõ khác nhau ra cùng 1 chữ), bỏ khoảng trắng đầu/cuối, nhiều dấu cách → 1 dấu cách
+const cleanName = (name) => String(name || '').normalize('NFC').trim().replace(/\s+/g, ' ');
+const keyOf = (name) => cleanName(name).toLocaleLowerCase('vi');   // so khớp không phân biệt hoa / thường
 
 // ---------- Token ----------
 const b64u = (s) => Buffer.from(s).toString('base64url');
@@ -65,7 +67,7 @@ setInterval(() => {
 
 // ---------- Routes ----------
 const REG_LIMIT = Number(process.env.REG_LIMIT) || 8; // số lần đăng ký tối đa / giờ / IP
-const USERNAME_RE =/^[\p{L}\p{N}_.-]{3,16}$/u;
+const USERNAME_RE = /^(?=.{3,16}$)[\p{L}\p{N}_.-]+(?: [\p{L}\p{N}_.-]+)*$/u;   // chữ (có dấu), số, _ . - và dấu cách giữa các từ
 const DUMMY_HASH = bcrypt.hashSync('dummy-password', 10);
 const router = express.Router();
 const userOf = (req) => { const n = verify((req.get('authorization') || '').replace(/^Bearer\s+/i, '')); return n ? users[keyOf(n)] : null; };
@@ -138,9 +140,9 @@ router.use(express.json({ limit: '16kb' }));   // bộ đồ + màu sơn có th�
 
 router.post('/register', async (req, res) => {
   if (limited('reg:' + req.ip, REG_LIMIT, 3600_000)) return res.status(429).json({ error: 'Đăng ký quá nhiều lần, thử lại sau' });
-  const username = String((req.body && req.body.username) || '').trim();
+  const username = cleanName(req.body && req.body.username);
   const password = String((req.body && req.body.password) || '');
-  if (!USERNAME_RE.test(username)) return res.status(400).json({ error: 'Tên đăng nhập 3–16 ký tự: chữ, số, _ . -' });
+  if (!USERNAME_RE.test(username)) return res.status(400).json({ error: 'Tên đăng nhập 3–16 ký tự: chữ (có dấu), số, dấu cách, _ . -' });
   if (password.length < 6 || password.length > 72) return res.status(400).json({ error: 'Mật khẩu từ 6 đến 72 ký tự' });
   if (users[keyOf(username)]) return res.status(409).json({ error: 'Tên đăng nhập đã có người dùng' });
   const hash = await bcrypt.hash(password, 10);
@@ -152,9 +154,8 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   if (limited('login:' + req.ip, 15, 60_000)) return res.status(429).json({ error: 'Thử quá nhiều lần, đợi 1 phút' });
-  const username = String((req.body && req.body.username) || '').trim();
   const password = String((req.body && req.body.password) || '').slice(0, 72);
-  const u = users[keyOf(username)];
+  const u = users[keyOf(req.body && req.body.username)];
   const ok = await bcrypt.compare(password, u ? u.hash : DUMMY_HASH);
   if (!u || !ok) return res.status(401).json({ error: 'Sai tên đăng nhập hoặc mật khẩu' });
   res.json({ token: sign(u.username), username: u.username });
