@@ -694,7 +694,7 @@
   #djBadge { position: fixed; top: 54px; left: 50%; transform: translateX(-50%); z-index: 6; padding: 4px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700;
     background: linear-gradient(135deg, rgba(255,42,61,.85), rgba(155,48,255,.85)); color: #fff; box-shadow: 0 4px 18px rgba(155,48,255,.35); pointer-events: none; white-space: nowrap; }
   body:not(.in-room) #djBadge, body:not(.in-room) #djPanel { display: none !important; }
-  #djPanel { position: fixed; left: 50%; transform: translateX(-50%); bottom: 64px; z-index: 30; width: min(900px, 96vw); padding: 10px 12px; border-radius: 18px; }
+  #djPanel { position: fixed; left: 50%; transform: translateX(-50%); bottom: 64px; z-index: 30; width: min(900px, calc(100vw - 230px));   /* chừa chỗ cho menu bên phải */ padding: 10px 12px; border-radius: 18px; }
   .djHead { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
   .djHead b { font-size: 15px; white-space: nowrap; }
   .djHint { color: var(--muted); font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -707,12 +707,15 @@
   .djMid { flex: 1; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
   .djRow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .djLbl { font-size: 12px; color: var(--muted); margin-right: 2px; }
+  .djBpm { min-width: 34px; text-align: center; font-size: 15px; }
+  #djAutoLvl { background: rgba(255,255,255,.07); color: inherit; }
+  #djAutoLvl option { background: #1a1018; }
   .djPads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
   .djPad { background: radial-gradient(circle at 50% 30%, rgba(255,42,61,.28), rgba(155,48,255,.16)); border: 1px solid rgba(255,90,120,.35); border-radius: 12px; color: inherit; font-size: 20px; padding: 7px 4px 5px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; }
   .djPad span { font-size: 11.5px; font-weight: 600; }
   .djPad:active, .djBtn:active { transform: scale(.95); filter: brightness(1.3); }
   .djDeck { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
-  .djVinyl { width: 150px; aspect-ratio: 1; border-radius: 50%; cursor: grab; touch-action: none; position: relative; box-shadow: 0 0 0 4px #222, 0 0 22px rgba(155,48,255,.35);
+  .djVinyl { width: clamp(90px, 13vw, 150px); aspect-ratio: 1; border-radius: 50%; cursor: grab; touch-action: none; position: relative; box-shadow: 0 0 0 4px #222, 0 0 22px rgba(155,48,255,.35);
     background: repeating-radial-gradient(circle, #0c0c0e 0 2px, #19191c 2px 4px); }
   .djVinyl.grab { cursor: grabbing; box-shadow: 0 0 0 4px #ff2a3d, 0 0 26px rgba(255,42,61,.6); }
   .djVinyl i { position: absolute; inset: 33%; border-radius: 50%; background: radial-gradient(circle, #fff 0 6%, #ff2a3d 7% 60%, #9b30ff 61%); }
@@ -1018,6 +1021,13 @@
   <div class="djBody">
     <div class="djDeck" data-deck="0"><div class="djVinyl"><i></i></div><span>Đĩa A</span></div>
     <div class="djMid">
+      <div class="djRow djAuto">
+        <button class="djBtn" id="djAutoBtn">🤖 Tự động DJ: TẮT</button>
+        <select id="djAutoLvl" class="djBtn" title="Độ quẩy"><option value="1">Nhẹ</option><option value="2" selected>Vừa</option><option value="3">Quẩy</option></select>
+        <button class="djBtn" id="djTap" title="Gõ 4 lần theo phách nhạc, lần cuối đúng lúc nhạc vào đoạn / drop">👆 Bấm theo nhịp</button>
+        <button class="djBtn" id="djBpmM">−</button><b id="djBpm" class="djBpm">—</b><button class="djBtn" id="djBpmP">+</button><span class="djLbl">BPM</span>
+        <span class="djLbl" id="djGenre"></span>
+      </div>
       <div class="djRow"><span class="djLbl">Tốc độ video</span>
         <button class="djBtn" data-rate="0.5">x0.5</button><button class="djBtn" data-rate="0.75">x0.75</button><button class="djBtn on" data-rate="1">x1</button><button class="djBtn" data-rate="1.25">x1.25</button><button class="djBtn" data-rate="1.5">x1.5</button>
       </div>

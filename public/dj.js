@@ -56,6 +56,26 @@ const SOUNDS = {
     g.connect(master); src.start(t); src.stop(t + 0.65);
   },
   rewind(t) { for (let k = 0; k < 3; k++) osc('sawtooth', 1300, 160, t + k * 0.17, 0.17, 0.12); noise(t, 0.55, 'bandpass', 2500, 1.5, 0.15, 400); },
+  boom(t) {                                                      // nổ trầm ngay lập tức (tự động DJ dùng đúng phách drop)
+    osc('sine', 120, 30, t, 1.4, 1.0); osc('sawtooth', 60, 32, t, 0.9, 0.16); noise(t, 0.35, 'lowpass', 320, 0.7, 0.55); noise(t, 0.12, 'highpass', 5000, 0.7, 0.18);
+  },
+  riser(t, o) {                                                  // tiếng rít dâng dần trong đoạn dồn (dài theo nhịp bài)
+    const dur = Math.max(2, Math.min(16, (o.beats || 16) * 60 / (o.bpm || 124)));
+    const s0 = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    s0.buffer = noiseBuf; s0.loop = true; f.type = 'bandpass'; f.Q.value = 3; f.frequency.setValueAtTime(300, t); f.frequency.exponentialRampToValueAtTime(9000, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.32, t + dur * 0.97); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.05);
+    s0.connect(f).connect(g).connect(master); s0.start(t); s0.stop(t + dur + 0.1);
+    osc('sawtooth', 110, 880, t, dur, 0.05);
+  },
+  roll(t, o) {                                                   // trống dồn: móc đơn → móc kép → móc ba theo nhịp bài
+    const beat = 60 / (o.bpm || 124), beats = o.beats || 8;
+    let tt = t; const end = t + beats * beat;
+    while (tt < end - 0.01) {
+      const prog = (tt - t) / (end - t), step = prog < 0.5 ? beat / 2 : prog < 0.8 ? beat / 4 : beat / 8;
+      noise(tt, 0.09, 'bandpass', 1700 + prog * 1500, 0.9, 0.18 + prog * 0.3); osc('triangle', 190 + prog * 80, 150, tt, 0.06, 0.1 + prog * 0.1);
+      tt += step;
+    }
+  },
   brake(t) {                                                     // phanh đĩa: tiếng chậm dần rồi tắt
     const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(2400, t); lp.frequency.exponentialRampToValueAtTime(120, t + 0.95); lp.connect(master);
     osc('sawtooth', 165, 18, t, 0.95, 0.3, lp); osc('sawtooth', 247, 26, t, 0.95, 0.15, lp);
@@ -69,7 +89,7 @@ export function level() {
   const g = master.gain.value || 1;
   return Math.min(1, (Math.sqrt(sum / abuf.length) / g) * 3.5);
 }
-export function sfx(name, volume) { if (!audio(volume) || !SOUNDS[name]) return; SOUNDS[name](ac.currentTime + 0.01); }
+export function sfx(name, volume, o = {}) { if (!audio(volume) || !SOUNDS[name]) return; SOUNDS[name](ac.currentTime + 0.01, o); }
 // tiếng chà đĩa: v = tốc độ kéo (-1..1), dấu = chiều kéo
 export function scratchSound(v, volume) {
   if (!audio(volume)) return;
@@ -77,6 +97,70 @@ export function scratchSound(v, volume) {
   if (a < 0.03) return;
   noise(t, 0.075, 'bandpass', 500 + a * 3200 * (v > 0 ? 1 : 0.7), 5, 0.25 + a * 0.45);
   osc('sawtooth', 180 + a * 520, v > 0 ? 260 + a * 700 : 120 + a * 300, t, 0.07, 0.06 + a * 0.08);
+}
+
+// ---------- nhận diện thể loại theo tên bài ----------
+// YouTube không cho đọc âm thanh video → đoán từ tên bài (và độ dài). energy: 0 nhẹ, 1 vừa, 2 sung.
+const GENRES = [
+  { id: 'movie', label: 'Phim / video nói', bpm: 100, energy: -1, re: /\b(tập|tap \d|full ?movie|phim|trailer|vietsub|thuyết minh|thuyet minh|review|podcast|vlog|reaction|livestream)\b/i },
+  { id: 'vina', label: 'Vinahouse', bpm: 136, energy: 2, re: /vina ?house|nonstop|bay phòng|bay phong|việt mix|viet mix|nhạc sàn|nhac san|dj [\wÀ-ỹ]+ remix|htrol|orinn|đại mèo|dai meo/i },
+  { id: 'phonk', label: 'Phonk', bpm: 130, energy: 2, re: /phonk|drift/i },
+  { id: 'edm', label: 'EDM / House', bpm: 128, energy: 2, re: /\bedm\b|house|electro|festival|bass ?boost|dubstep|trance|techno|big room|future bass|mashup|alan walker|martin garrix|tiesto|avicii|remix/i },
+  { id: 'dnb', label: 'Drum & Bass', bpm: 172, energy: 2, re: /drum ?(and|&|n) ?bass|\bdnb\b|jungle/i },
+  { id: 'rap', label: 'Rap / Hip-hop', bpm: 92, energy: 1, re: /\brap\b|hip ?hop|trap|drill|freestyle|cypher|rapper|đen vâu|den vau|binz|wowy|rhymastic/i },
+  { id: 'kpop', label: 'K-pop / Dance pop', bpm: 120, energy: 1, re: /k-?pop|bts|blackpink|twice|newjeans|aespa|seventeen|stray kids|dance practice|choreograph/i },
+  { id: 'chill', label: 'Lofi / Chill', bpm: 78, energy: 0, re: /lo-?fi|chill|acoustic|piano|relax|sleep|study|cover|guitar|mộc|unplugged/i },
+  { id: 'ballad', label: 'Ballad / Trữ tình', bpm: 70, energy: 0, re: /ballad|bolero|trữ tình|tru tinh|nhạc vàng|nhac vang|tình ca|tinh ca|buồn|buon|sad/i },
+];
+export function detectGenre(title, duration) {
+  const t = String(title || '');
+  for (const g of GENRES) if (g.re.test(t)) return g;
+  if (duration > 40 * 60) return GENRES[0];                     // dài quá 40 phút → nhiều khả năng là phim
+  return { id: 'pop', label: 'Pop', bpm: 118, energy: 1 };
+}
+
+// ---------- tự động đánh DJ ----------
+// Chạy trên máy của DJ, bám theo phách tính từ thời gian video (mọi người cùng phách).
+// Bài chia thành đoạn 32 phách (8 ô nhịp): thường → dồn → DROP → ... tuỳ độ sung; mức 1 nhẹ, 2 vừa, 3 quẩy.
+export function createAutoDJ({ emit, scratch, party }) {
+  let last = null, genre = { id: 'pop', energy: 1, bpm: 118 }, lvl = 2;
+  const later = (ms, fn) => setTimeout(fn, ms);
+  const PLAN = { 2: ['groove', 'build', 'drop', 'drop'], 1: ['groove', 'groove', 'build', 'drop'], 0: ['groove', 'groove', 'groove', 'break'] };
+  const flurry = () => { [0.9, -0.8, 0.85, -0.9, 0.7, -0.6].forEach((v, i) => later(i * 45, () => scratch(v, i % 2))); };   // chà đĩa nhanh cuối đoạn
+  function tick(b) {
+    if (last === b) return;
+    if (last != null && (b < last || b - last > 8)) { last = b; return; }   // vừa tua → chờ phách kế tiếp
+    last = b;
+    const pos = ((b % 32) + 32) % 32, P = Math.floor(b / 32), E = genre.energy;
+    if (E < 0) { if (pos === 0) emit('light', 'color'); return; }          // phim: chỉ đổi màu đèn nhẹ nhàng
+    const sec = (PLAN[E] || PLAN[1])[((P % 4) + 4) % 4], rnd = Math.random();
+    if (pos === 0) {
+      if (sec === 'drop') {
+        emit('pad', 'boom'); emit('light', 'strobe'); if (lvl >= 2) emit('light', 'laser');
+        if (!party()) emit('party');
+        if (lvl >= 2 && E >= 2 && rnd < 0.6) later(450, () => emit('pad', 'airhorn'));
+      } else if (sec === 'break') { emit('light', 'blackout'); if (party()) emit('party'); }
+      else { emit('light', 'color'); if (sec === 'groove' && party() && E < 2) emit('party'); }
+      return;
+    }
+    if (sec === 'build') {
+      if (pos === 8 && E >= 2 && lvl >= 2) emit('pad', 'siren');
+      if (pos === 16) emit('pad', 'riser');                                  // rít dâng 16 phách → drop
+      if (pos === 24 && lvl >= 2) emit('pad', 'roll');                       // trống dồn 8 phách cuối
+      if (pos === 31) emit('light', 'blackout');
+      if (pos % 8 === 0) emit('light', 'color');
+      return;
+    }
+    if (pos % 8 === 0) emit('light', 'color');                               // đổi màu mỗi 2 ô nhịp
+    if (sec === 'drop') {
+      if (pos === 16 && lvl >= 2) { emit('light', 'strobe'); if (lvl >= 3 && rnd < 0.5) emit('pad', 'airhorn'); }
+      if (pos === 8 && lvl >= 3 && rnd < 0.4) emit('pad', 'yeah');
+      if (pos === 28 && lvl >= 3 && E >= 2 && P % 4 === 3) emit('stutter');
+    }
+    if (pos === 30 && lvl >= 2 && (sec === 'drop' || E >= 1) && rnd < 0.7) flurry();
+    if (pos === 16 && sec === 'groove' && lvl >= 2 && E >= 1) emit('light', 'laser');
+  }
+  return { tick, setGenre(g) { genre = g; last = null; }, setLevel(l) { lvl = l; }, reset() { last = null; } };
 }
 
 // ---------- bảng điều khiển của DJ ----------

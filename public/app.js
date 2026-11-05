@@ -1,7 +1,7 @@
 // XEMCHUAVN - client
 // Cảnh 3D (Three.js) + video YouTube gắn lên màn hình rạp (CSS3D) + nhân vật có tên/bong bóng chat + voice WebRTC
 import * as THREE from 'three';
-import { sfx, scratchSound, buildPanel, level as djLevel } from '/dj.js';   // bàn DJ: âm thanh hiệu ứng tự tổng hợp + bảng điều khiển
+import { sfx, scratchSound, buildPanel, level as djLevel, detectGenre, createAutoDJ } from '/dj.js';   // bàn DJ: âm thanh hiệu ứng tự tổng hợp + bảng điều khiển
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -936,7 +936,7 @@ const partyLights = PARTY_COLORS.slice(0, 3).map((c, k) => { const l = new THREE
 function updateParty(t, dt) {
   partyFade += ((partyOn ? 1 : 0) - partyFade) * Math.min(1, dt * 2.5);
   const f = partyFade, live = f > 0.01;
-  const beat = t * BPM / 60, kick = Math.exp(-(beat % 1) * 5);   // nháy mạnh đầu mỗi nhịp rồi tắt dần
+  const beat = beatClock(t), kick = Math.exp(-(beat % 1) * 5);   // nháy mạnh đầu mỗi nhịp rồi tắt dần (theo nhịp bài nếu DJ đã bắt nhịp)
   const bar = Math.floor(beat / 4), palette = (k) => PARTY_COLORS[(bar + k) % PARTY_COLORS.length];
   const showFx = live && camMode !== 'screen';                    // góc sát màn = chỉ xem phim
 
@@ -948,7 +948,7 @@ function updateParty(t, dt) {
   djLight += ((cur && cur.dj ? 1 : 0) - djLight) * Math.min(1, dt * 3);
   const dl = djLight, L = (typeof djFx === 'object' && djFx) ? djFx.level || 0 : 0;
   if (dl > 0.01) {
-    const djBar = Math.floor(t * BPM / 60 * ((cur && cur.rate) || 1) / 4);
+    const djBar = Math.floor(beatClock(t) / 4);
     HEMI.intensity -= dl * (0.24 - 0.2 * L);                                 // phòng tối bớt, chớp sáng mỗi nhịp
     for (let k = 0; k < PARTY_TINT.length; k++) {
       _pc.setHex((djBar + k) % 2 ? CT.a : CT.b).multiplyScalar(0.12 + 1.15 * L);
@@ -4844,7 +4844,7 @@ if (DJ_IDX >= 0) {
       const w = base + djFx.deckV[i]; djPlatters[i].rotation.y -= w * dt;
       if (djPanel && amDJ()) djPanel.spin(i, w * dt);
     }
-    const beat = t * BPM / 60, k = Math.exp(-(beat % 1) * 5);
+    const beat = beatClock(t), k = Math.exp(-(beat % 1) * 5);
     djBars.forEach((b, j) => { b.scale.y = playing ? 0.12 + (0.5 + 0.5 * Math.sin(t * (5 + j * 1.3) + j * 2.1)) * 0.75 * (0.45 + 0.55 * k) : 0.06; });
   };
   MYSTIC_SPIN.push(djBooth);
@@ -4859,7 +4859,7 @@ spk.obj.userData.update = (dt, t) => {
   let L = 0;
   if (on) {
     const playing = !!(cur.current && !cur.paused) && !djFx.cutOn && performance.now() > djFx.brakeUntil - 1000;
-    const beat = t * BPM / 60 * (cur.rate || 1), k = Math.exp(-(beat % 1) * 6), hh = Math.exp(-((beat + 0.5) % 1) * 9);
+    const beat = beatClock(t), k = Math.exp(-(beat % 1) * 6), hh = Math.exp(-((beat + 0.5) % 1) * 9);
     const bar = Math.floor(beat / 4), vari = 0.72 + 0.28 * Math.abs(Math.sin(bar * 1.73 + Math.floor(beat) * 0.61));
     const fake = playing ? Math.min(1, (0.9 * k + 0.25 * hh) * vari) : 0;
     L = Math.max(fake, djLevel());
@@ -4884,7 +4884,7 @@ MYSTIC_SPIN.push(spk.obj);
 
 // dáng DJ: tay đặt trên 2 đĩa, chà thì tay phải lắc, đầu gật theo nhịp; lúc drop giơ tay trái; thỉnh thoảng 1 tay giữ tai nghe
 function djStep(a, t, y0) {
-  const g = a.g, now = performance.now(), beat = t * BPM / 60, k = Math.exp(-(beat % 1) * 5);
+  const g = a.g, now = performance.now(), beat = beatClock(t), k = Math.exp(-(beat % 1) * 5);
   const scratching = now < djFx.scratchUntil, pump = now < djFx.pumpUntil, phones = !scratching && !pump && Math.floor(beat / 8) % 2 === 1;
   g.rotation.y = Math.PI; g.position.y = y0 + Math.abs(Math.sin(beat * Math.PI)) * 0.04;
   a.armR.rotation.set(0.55, scratching ? Math.sin(t * 32) * 0.45 : 0, 0.16);
@@ -4926,7 +4926,8 @@ function djOnState(s) {
   $('djLbl').textContent = me ? 'Bảng DJ' : 'Bàn DJ';
   $('dDJ').classList.toggle('active', me);
   $('djBadge').classList.toggle('hidden', !s.dj);
-  if (s.dj) $('djBadge').textContent = `🎧 DJ ${s.dj.name}${(s.rate || 1) !== 1 ? ' · x' + s.rate : ''}`;
+  if (s.dj) $('djBadge').textContent = `🎧 DJ ${s.dj.name}${s.dj.auto ? ' · 🤖 Tự động' : ''}${(s.rate || 1) !== 1 ? ' · x' + s.rate : ''}`;
+  autoOnState(s, me);
 }
 
 // ---- hiệu ứng cho cả rạp
@@ -4963,8 +4964,9 @@ function onDJFx(d) {
       if (!amDJ()) { scratchSound(d.v, vol); djFx.deckV[d.deck === 1 ? 1 : 0] += d.v * 14; duckVideo(0.35, 160); }
       djFx.scratchUntil = now + 250; break;
     case 'pad':
-      sfx(d.v, vol);
+      sfx(d.v, vol, { bpm: d.bpm || BPM, beats: d.v === 'riser' ? 16 : 8 });
       if (d.v === 'drop') { setTimeout(() => djFlash('strobe'), 550); djFx.pumpUntil = now + 2600; }
+      else if (d.v === 'boom') djFx.pumpUntil = now + 2600;
       else if (d.v === 'airhorn' || d.v === 'yeah' || d.v === 'siren') djFx.pumpUntil = now + 1500;
       break;
     case 'light': djFlash(d.v); break;
@@ -4980,4 +4982,66 @@ function onDJFx(d) {
   }
 }
 
+// ---- nhịp bài: tính từ thời gian video → đèn, loa, dáng DJ, tự động DJ cùng phách trên mọi máy
+function beatClock(t) {
+  const b = cur && cur.djBeat;
+  if (b && media && cur.current && !cur.current.live) { try { return (media.time() - b.at) * b.bpm / 60; } catch {} }
+  return t * BPM / 60 * ((cur && cur.rate) || 1);
+}
 
+// =====================================================================
+//  TỰ ĐỘNG DJ — nhận diện thể loại theo tên bài, bắt nhịp (tự đoán hoặc DJ bấm theo nhạc), tự đánh theo cấu trúc bài
+// =====================================================================
+const autoDJ = createAutoDJ({
+  emit: (k, v) => socket && socket.emit('dj:fx', { k, v }),
+  scratch: (v, i) => { socket && socket.emit('dj:fx', { k: 'scratch', v, deck: i }); scratchSound(v, vol); djFx.scratchUntil = performance.now() + 250; djFx.deckV[i] += v * 14; duckVideo(0.35, 160); },
+  party: () => !!(cur && cur.party && cur.party.dj),
+});
+const auto = { on: false, token: -1, genre: null, tapped: false, taps: [] };
+function sendBeat(bpm, at) { if (socket) socket.emit('dj:fx', { k: 'beat', bpm, at }); }
+function showBeatInfo() {
+  const b = cur && cur.djBeat, g = auto.genre;
+  $('djBpm').textContent = b ? Math.round(b.bpm) : '—';
+  $('djGenre').textContent = g ? `Nhận diện: ${g.label}${auto.tapped ? ' · nhịp bấm tay' : ' · theo tên bài'}` : 'Chưa có bài';
+  $('djAutoBtn').textContent = auto.on ? '🤖 Tự động DJ: BẬT' : '🤖 Tự động DJ: TẮT';
+  $('djAutoBtn').classList.toggle('on', auto.on);
+}
+// DJ: bài mới → đoán thể loại + nhịp từ tên bài, gửi cho cả phòng
+function autoOnState(s, me) {
+  if (!me) { if (auto.on) auto.on = false; return; }
+  if (s.current && s.token !== auto.token) {
+    auto.token = s.token; auto.tapped = false; auto.taps = [];
+    auto.genre = detectGenre(s.current.title, 0); autoDJ.setGenre(auto.genre);
+    if (!s.current.live) sendBeat(auto.genre.bpm, 0);
+  }
+  showBeatInfo();
+}
+$('djAutoBtn').onclick = () => {
+  auto.on = !auto.on; autoDJ.reset();
+  if (auto.on && cur && cur.current && !cur.djBeat && auto.genre) sendBeat(auto.genre.bpm, 0);
+  socket && socket.emit('dj:fx', { k: 'auto', v: auto.on });
+  toast(auto.on ? `🤖 Tự động DJ bật · ${auto.genre ? auto.genre.label : ''} — bấm "Bấm theo nhịp" 4 lần theo nhạc để khớp hơn` : 'Đã tắt tự động DJ');
+  showBeatInfo();
+};
+$('djAutoLvl').onchange = (e) => autoDJ.setLevel(Number(e.target.value));
+// bấm theo nhịp: gõ 4 lần trở lên theo phách nhạc; lần gõ cuối được coi là phách 1 (nên gõ đúng lúc nhạc vào đoạn / drop)
+$('djTap').onclick = () => {
+  if (!media || !cur || !cur.current || cur.current.live) return toast('Cần có video đang phát');
+  const now = performance.now();
+  if (auto.taps.length && now - auto.taps[auto.taps.length - 1].p > 2000) auto.taps = [];
+  auto.taps.push({ p: now, v: media.time() }); if (auto.taps.length > 8) auto.taps.shift();
+  $('djTap').textContent = `👆 ${auto.taps.length}`;
+  clearTimeout(auto.tapT); auto.tapT = setTimeout(() => ($('djTap').textContent = '👆 Bấm theo nhịp'), 2200);
+  if (auto.taps.length < 4) return;
+  const T = auto.taps, gap = (T[T.length - 1].p - T[0].p) / (T.length - 1) / 1000;   // giây thật giữa 2 phách
+  const bpm = Math.max(60, Math.min(200, 60 / gap / ((cur.rate) || 1)));            // đổi sang nhịp của bài (video có thể đang tua nhanh / chậm)
+  auto.tapped = true; autoDJ.reset();
+  sendBeat(Math.round(bpm * 10) / 10, Math.max(0, T[T.length - 1].v - 0.05));
+};
+for (const [id, d] of [['djBpmM', -1], ['djBpmP', 1]]) $(id).onclick = () => { const b = cur && cur.djBeat; if (b) { auto.tapped = true; sendBeat(Math.max(60, Math.min(200, Math.round(b.bpm) + d)), b.at); } };
+// nhịp tim của tự động DJ: chạy trước ~0.12 giây để bù độ trễ mạng
+setInterval(() => {
+  if (!auto.on || !amDJ() || !cur || !cur.current || cur.paused || !cur.djBeat || !media) return;
+  const b = Math.floor(beatClock(0) + 0.12 * cur.djBeat.bpm / 60);
+  if (b >= 0) autoDJ.tick(b);
+}, 25);

@@ -96,6 +96,8 @@ function makeRoom(id, type, extra = {}) {
     djIdx: T.dance ? T.seats + T.dance : -1,   // chỗ đứng sau bàn DJ (chỉ phòng có sân khấu), ngay sau các chỗ nhảy
     dj: null,                                   // { id, name, prev } người đang chơi DJ
     rate: 1,                                    // tốc độ phát chung (DJ chỉnh)
+    djBeat: null,                               // { bpm, at }: nhịp bài đang phát, at = giây trong video có phách 1 (đèn / loa / tự động DJ dùng chung)
+    djAuto: false,                              // DJ đang bật chế độ tự động đánh
     id,
     type, // 'public' | 'private'
     name: extra.name || (type === 'public' ? 'Rạp công cộng' : id),
@@ -197,7 +199,8 @@ function snapshot(room) {
     users: list,
     share: room.share ? { id: room.share.id, name: room.share.name } : null,   // ai đang chia sẻ màn hình (phòng riêng)
     rate: room.rate || 1,
-    dj: room.dj ? { id: room.dj.id, name: room.dj.name } : null,
+    dj: room.dj ? { id: room.dj.id, name: room.dj.name, auto: !!room.djAuto } : null,
+    djBeat: room.djBeat,
   };
 }
 
@@ -220,6 +223,7 @@ function startNext(room) {
   room.current = next;
   room.startedAt = Date.now();
   room.rate = 1;
+  room.djBeat = null;                           // bài mới → nhịp mới (DJ / tự động DJ gửi lại)
   room.paused = false;
   room.pausedAt = 0;
   room.token++;
@@ -324,7 +328,7 @@ function leaveRoom(socket) {
 const canDJ = (name) => auth.hasRole(name, 'dj') || auth.isAdmin(name);
 function endDJ(room, moveBack = true) {
   const dj = room.dj; if (!dj) return;
-  room.dj = null;
+  room.dj = null; room.djAuto = false; room.djBeat = null;
   clearTimeout(room.brakeT); clearTimeout(room.brakeT2);
   if (room.paused && room.brakePause) { room.paused = false; setPos(room, room.pausedAt); }   // đang phanh dở → chạy tiếp
   room.brakePause = false;
@@ -543,7 +547,7 @@ io.on('connection', (socket) => {
     const room = rooms.get(socket.data.room);
     if (room && room.dj && room.dj.id === socket.id) endDJ(room, true);
   });
-  const DJ_PADS = new Set(['airhorn', 'siren', 'drop', 'clap', 'kick', 'zap', 'yeah', 'snare']);
+  const DJ_PADS = new Set(['airhorn', 'siren', 'drop', 'clap', 'kick', 'zap', 'yeah', 'snare', 'boom', 'riser', 'roll']);
   const DJ_LIGHTS = new Set(['strobe', 'laser', 'blackout', 'color']);
   const DJ_RATES = [0.5, 0.75, 1, 1.25, 1.5];
   socket.on('dj:fx', (d) => {
@@ -555,10 +559,21 @@ io.on('connection', (socket) => {
       const v = Math.max(-1, Math.min(1, Number(d.v) || 0)), deck = d.deck === 1 ? 1 : 0;
       return socket.volatile.to(room.id).emit('dj:fx', { k: 'scratch', v, deck });
     }
-    if (d.k !== 'cut' && now - (socket.data.djT || 0) < 150) return; socket.data.djT = now;
+    if (d.k !== 'cut') {                                          // tối đa ~8 hiệu ứng / giây, cho phép dồn 6 cái cùng lúc
+      const tk = socket.data.djTok ?? 6, last = socket.data.djT || now;
+      const tok = Math.min(6, tk + (now - last) / 125); socket.data.djT = now;
+      if (tok < 1) { socket.data.djTok = tok; return; }
+      socket.data.djTok = tok - 1;
+    }
     const live = !room.current || room.current.live;
     switch (d.k) {
-      case 'pad': if (DJ_PADS.has(d.v)) io.to(room.id).emit('dj:fx', { k: 'pad', v: d.v }); return;
+      case 'pad': if (DJ_PADS.has(d.v)) io.to(room.id).emit('dj:fx', { k: 'pad', v: d.v, bpm: room.djBeat ? room.djBeat.bpm : 124 }); return;
+      case 'beat': {                                               // nhịp bài (tự nhận diện theo tên bài hoặc DJ bấm theo nhịp)
+        const bpm = Math.round(Number(d.bpm) * 10) / 10, at = Number(d.at);
+        if (!(bpm >= 60 && bpm <= 200) || !(at >= 0 && at < 86400)) return;
+        room.djBeat = { bpm, at: Math.round(at * 1000) / 1000 }; broadcast(room); return;
+      }
+      case 'auto': room.djAuto = !!d.v; broadcast(room); return;
       case 'light': if (DJ_LIGHTS.has(d.v)) io.to(room.id).emit('dj:fx', { k: 'light', v: d.v }); return;
       case 'cut': io.to(room.id).emit('dj:fx', { k: 'cut', v: !!d.v }); return;   // tắt tiếng video trong lúc giữ nút
       case 'stutter': io.to(room.id).emit('dj:fx', { k: 'stutter' }); return;     // lặp nhịp ngắn (mỗi máy tự làm rồi đồng bộ lại)
