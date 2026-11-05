@@ -622,9 +622,13 @@
     .overlay { padding: 8px; }
     .modal { max-height: calc(100dvh - 16px); padding: 16px 14px; }
     .card { width: 100%; }
-    #pill { top: 8px; left: 8px; transform: none; padding: 6px 12px; gap: 8px; font-size: 12px; max-width: calc(100vw - 112px); }
+    #pill { top: 8px; left: 8px; transform: none; padding: 5px 10px; gap: 6px; font-size: 11.5px; max-width: calc(100vw - 196px); white-space: nowrap; overflow: hidden; }
+    #pill .lbl { display: none; } #pill .sep { display: none; }
+    #topright button { height: 36px; min-width: 36px; padding: 0 9px; border-radius: 11px; }
+    #topright .lbl { display: none; }                       /* điện thoại: Thoát phòng / Link phòng chỉ còn biểu tượng */
+    #topright .ico { width: 18px; height: 18px; }
     #pill .ico { width: 16px; height: 16px; }
-    #topright { top: 8px; right: 8px; gap: 6px; }
+    #topright { top: 8px; right: 8px; gap: 5px; }
     #topright .icon-btn { width: 36px; height: 36px; }
     #avatarBtn { width: 38px; height: 38px; }
     /* menu chính thành thanh ngang cuộn được ở đáy màn hình */
@@ -832,13 +836,13 @@
 
 <!-- ===== HUD ===== -->
 <div class="hud glass" id="pill" role="button" tabindex="0" title="Xem ai đang ở trong phòng">
-  <span><i class="dot"></i>Đang chiếu</span><i class="sep"></i>
+  <span><i class="dot"></i><span class="lbl">Đang chiếu</span></span><i class="sep"></i>
   <span><svg class="ico"><use href="#i-users"/></svg> <b id="online">0</b> đang online<br><span class="muted"><span id="seated">0</span> / 152 chỗ</span></span>
 </div>
 
 <div class="hud" id="topright">
-  <button class="glass hidden" id="btnLeaveRoom"><svg class="ico"><use href="#i-door"/></svg> Thoát phòng</button>
-  <button class="glass" id="btnCopy" style="display:none"><svg class="ico"><use href="#i-link"/></svg> Link phòng</button>
+  <button class="glass hidden" id="btnLeaveRoom" title="Thoát phòng" aria-label="Thoát phòng"><svg class="ico"><use href="#i-door"/></svg><span class="lbl"> Thoát phòng</span></button>
+  <button class="glass" id="btnCopy" style="display:none" title="Copy link mời vào phòng" aria-label="Copy link phòng"><svg class="ico"><use href="#i-link"/></svg><span class="lbl"> Link phòng</span></button>
   <button class="glass" id="btnFs" title="Toàn màn hình"><svg class="ico"><use href="#i-max"/></svg></button>
   <div style="position:relative">
     <button id="avatarBtn">?</button>
