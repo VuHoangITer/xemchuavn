@@ -1,7 +1,7 @@
 # Cấu hình deploy lên Render (gói Free). Render đọc file này khi tạo "Blueprint" từ repo GitHub.
 services:
   - type: web
-    name: rapchung
+    name: xemchuavn
     runtime: node
     plan: free
     region: singapore          # gần Việt Nam nhất

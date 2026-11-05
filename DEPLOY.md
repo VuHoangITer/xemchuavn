@@ -22,9 +22,9 @@ Tổng thời gian: khoảng 20–30 phút. Cần: 1 email, không cần thẻ n
    ```
    mongodb+srv://TEN_USER:<db_password>@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
    ```
-6. Sửa chuỗi đó: thay `<db_password>` bằng mật khẩu ở bước 3, và thêm tên database `rapchung` ngay sau `.net/`:
+6. Sửa chuỗi đó: thay `<db_password>` bằng mật khẩu ở bước 3, và thêm tên database `xemchuavn` ngay sau `.net/`:
    ```
-   mongodb+srv://TEN_USER:MAT_KHAU@cluster0.xxxxx.mongodb.net/rapchung?retryWrites=true&w=majority&appName=Cluster0
+   mongodb+srv://TEN_USER:MAT_KHAU@cluster0.xxxxx.mongodb.net/xemchuavn?retryWrites=true&w=majority&appName=Cluster0
    ```
    Đây là **MONGODB_URI** — giữ bí mật, không gửi cho ai, không dán lên GitHub.
 
@@ -40,14 +40,14 @@ Thấy `Xong: N tài khoản, M ảnh đã lên MongoDB` là được. Khoá đ�
 
 ## Bước 3 — Đưa mã nguồn lên GitHub
 
-1. Đăng ký **https://github.com** → góc phải **+** → **New repository** → đặt tên `rapchung` → chọn **Private** → **Create repository** (không tick thêm README).
+1. Đăng ký **https://github.com** → góc phải **+** → **New repository** → đặt tên `xemchuavn` → chọn **Private** → **Create repository** (không tick thêm README).
 2. Trong thư mục dự án chạy (thay `TEN_GITHUB`):
    ```bash
    git init
    git add .
    git commit -m "Rạp Chung"
    git branch -M main
-   git remote add origin https://github.com/TEN_GITHUB/rapchung.git
+   git remote add origin https://github.com/TEN_GITHUB/xemchuavn.git
    git push -u origin main
    ```
    File `.gitignore` đã chặn sẵn `data/` (tài khoản, ảnh, khoá) và `node_modules/` nên không bị lộ dữ liệu.
@@ -55,11 +55,11 @@ Thấy `Xong: N tài khoản, M ảnh đã lên MongoDB` là được. Khoá đ�
 ## Bước 4 — Chạy web trên Render
 
 1. Vào **https://render.com** → **Get Started** → đăng ký bằng **GitHub**.
-2. **New +** → **Blueprint** → chọn repo `rapchung` (lần đầu bấm *Configure account* để cho Render đọc repo).
+2. **New +** → **Blueprint** → chọn repo `xemchuavn` (lần đầu bấm *Configure account* để cho Render đọc repo).
 3. Render đọc file `render.yaml` → hỏi biến môi trường:
    - **MONGODB_URI**: dán chuỗi ở bước 1.6.
    - **TURN_URLS / TURN_USERNAME / TURN_CREDENTIAL**: để trống (xem bước 5).
-4. **Apply** → đợi build 2–4 phút → trạng thái **Live** → bấm link `https://rapchung-xxxx.onrender.com`.
+4. **Apply** → đợi build 2–4 phút → trạng thái **Live** → bấm link `https://xemchuavn.onrender.com` (nếu tên đã có người dùng, Render tự thêm đuôi, vd `xemchuavn-ab12.onrender.com`).
 
 Xong! Gửi link đó cho bạn bè là vào xem chung được. Voice + chia sẻ màn hình chạy được vì Render có sẵn HTTPS.
 
@@ -68,7 +68,7 @@ Xong! Gửi link đó cho bạn bè là vào xem chung được. Voice + chia s�
 Không có TURN, người dùng mạng 4G hoặc mạng công ty đôi khi không nghe / không thấy được nhau.
 
 1. Đăng ký **https://www.metered.ca/tools/openrelay/** (gói miễn phí, có giới hạn dung lượng mỗi tháng) → tạo **App** → mục **TURN credentials** lấy *Username*, *Password* và danh sách URL.
-2. Render → service `rapchung` → **Environment** → điền:
+2. Render → service `xemchuavn` → **Environment** → điền:
    - `TURN_URLS` = các URL cách nhau dấu phẩy, ví dụ `turn:global.relay.metered.ca:80,turn:global.relay.metered.ca:443,turns:global.relay.metered.ca:443?transport=tcp`
    - `TURN_USERNAME`, `TURN_CREDENTIAL` = thông tin vừa lấy
 3. **Save Changes** → Render tự khởi động lại.
