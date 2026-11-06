@@ -380,14 +380,13 @@ const DJ_IDX = DANCE_N > 0 && TPLC.stage ? SEATS + DANCE_N : -1;
 const DJ_SPOT = TPLC.stage ? { x: 0, z: TPLC.stage.z0 + 1.6 } : { x: 0, z: 0 };
 const isDJ = (i) => DJ_IDX >= 0 && i === DJ_IDX;
 // Võ đài boxing ở góc phải sàn sau: 2 chỗ đứng (góc đỏ A, góc xanh B) ngay sau bàn DJ
-const RING_A = DJ_IDX >= 0 ? DJ_IDX + 1 : -1, RING_B = DJ_IDX >= 0 ? DJ_IDX + 2 : -1, RING_H = 1.3;   // bục cao để nhìn thấy từ xa
-const isRing = (i) => RING_A >= 0 && (i === RING_A || i === RING_B);
-const isDance = (i) => i != null && i >= SEATS && (i < SEATS + DANCE_N || i === DJ_IDX || isRing(i));   // đứng (sàn nhảy, bàn DJ, võ đài)
+
+const isDance = (i) => i != null && i >= SEATS && (i < SEATS + DANCE_N || i === DJ_IDX);   // đứng trên sân khấu (sàn nhảy hoặc bàn DJ)
 const isRealSeat = (i) => i != null && i >= 0 && i < SEATS;
-const seatName = (i) => (isRing(i) ? 'Võ đài' : isDJ(i) ? 'Bàn DJ' : isDance(i) ? 'Sàn nhảy ' + (i - SEATS + 1) : SEAT_INFO[i].label);
+const seatName = (i) => (isDJ(i) ? 'Bàn DJ' : isDance(i) ? 'Sàn nhảy ' + (i - SEATS + 1) : SEAT_INFO[i].label);
 const seatRow = (i) => (isDance(i) ? -1 : SEAT_INFO[i].row);
 const seatType = (i) => (isDance(i) ? DANCE_TYPE : SEAT_TYPES[SEAT_INFO[i].type]);
-function seatPos(i) { if (isRing(i)) return { x: RING_X + (i === RING_A ? -1.7 : 1.7), z: RING_Z }; if (isDJ(i)) return DJ_SPOT; if (isDance(i)) return DANCE_SPOTS[i - SEATS]; const s = SEAT_INFO[i]; return { x: s.x, z: s.z }; }
+function seatPos(i) { if (isDJ(i)) return DJ_SPOT; if (isDance(i)) return DANCE_SPOTS[i - SEATS]; const s = SEAT_INFO[i]; return { x: s.x, z: s.z }; }
 
 function mulberry32(a) {
   return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a);
@@ -1541,7 +1540,7 @@ let labelsOn = true;
 // ---- Đường đi: mỗi hàng ghế có 1 "làn" sau lưng ghế; 2 lối đi dọc ở x = ±AISLE_X;
 // sau hàng cuối có lối ngang nối 2 lối đi; cửa vào ở giữa tường sau.
 const ENTRANCE = new THREE.Vector3(0, 0, HALL_BACK - 1.2);
-var RING_X = HALL_X - 6.5, RING_Z = LAND_Z0 + 7.5;                      // tâm võ đài (góc phải sàn sau)
+
 const CROSS_Z = LAND_Z0 + 1.6;                            // lối ngang trên sàn sau hàng cuối
 const WALK_SPEED = 7.5;   // đi nhanh khi đổi chỗ
 const LANE = (r) => ROW_INFO[r].lane;                      // lối nhỏ sau lưng mỗi hàng
@@ -1562,14 +1561,7 @@ function routeToDance(p, seat) {
   pts.push(V3(sp.x, FRONT_Z), V3(sp.x, sp.z));
   return pts;
 }
-function routeToRing(p, seat) {                            // ra lối đi → lên lối ngang phía sau → vào góc võ đài
-  const pts = [], sp = seatPos(seat), pa = aisleOf(p.x);
-  if (p.z < CROSS_Z - 0.3) { if (Math.abs(p.x - pa) > 0.05) pts.push(V3(pa, p.z)); pts.push(V3(pa, CROSS_Z)); }
-  pts.push(V3(sp.x, CROSS_Z), V3(sp.x, sp.z));
-  return pts;
-}
 function routeFrom(p, seat) {
-  if (isRing(seat)) return routeToRing(p, seat);
   if (isDance(seat)) return routeToDance(p, seat);
   const pts = [], s = seatPos(seat), lz = LANE(seatRow(seat)), ta = aisleOf(s.x);
   if (Math.abs(p.z - lz) > 0.05) {                         // khác làn → ra lối đi, (đổi lối đi ở phía sau), đi tới làn đích
@@ -2401,8 +2393,7 @@ function updateAvatars(dt, t) {
     } else if (a.dancing) {                                   // nhảy theo combo điệu đã chọn (mỗi điệu 4 giây)
       const sp = seatPos(a.seat);
       setRide(a, false);
-      if (isRing(a.seat)) boxStep(a, t, floorY(sp.z, sp.x));    // võ sĩ: thủ thế, ra đòn, trúng đòn, KO
-      else if (isDJ(a.seat)) djStep(a, t, floorY(sp.z));        // DJ: tay trên đĩa, gật đầu theo nhịp
+      if (isDJ(a.seat)) djStep(a, t, floorY(sp.z));        // DJ: tay trên đĩa, gật đầu theo nhịp
       else danceStep(a, a.dances[Math.floor(t / 4) % a.dances.length], t, Math.PI, floorY(sp.z));
       updatePet(a, t, 'dance');
     } else {
@@ -2682,15 +2673,15 @@ function setMyRecline(v) {
 // Chỉ khi đã có ghế mới hiện nút "góc nhìn từ ghế" + thanh ngả lưng; rạp đầy thì vẫn xem bằng các góc khác
 function updateSeatUI() {
   const seated = isRealSeat(mySeat);                           // đang nhảy thì không có góc nhìn ghế / ngả lưng / căn tin
-  $('dLeave').querySelector('.lbl').textContent = isRing(mySeat) ? 'Bỏ cuộc' : isDJ(mySeat) ? 'Rời bàn DJ' : isDance(mySeat) ? 'Rời sàn nhảy' : 'Rời ghế';
-  document.querySelector('#bl [data-cam=seat]').classList.toggle('hidden', !seated && !isRing(mySeat));   // võ sĩ cũng có góc nhìn riêng (cận cảnh võ đài)
+  $('dLeave').querySelector('.lbl').textContent = isDJ(mySeat) ? 'Rời bàn DJ' : isDance(mySeat) ? 'Rời sàn nhảy' : 'Rời ghế';
+  document.querySelector('#bl [data-cam=seat]').classList.toggle('hidden', !seated);
   $('reclineBox').classList.toggle('hidden', !seated || camMode !== 'seat');   // ngả lưng chỉ chỉnh ở góc nhìn từ ghế
   updateFeedUI();
   $('dCanteen').classList.toggle('hidden', !seated); $('dLeave').classList.toggle('hidden', mySeat == null);
   if (!seated && panel === 'canteen') openPanel('canteen');
   if (panel === 'canteen') renderMenu();
   if (seated) $('recline').value = Math.round((myReclineLocal ?? DEFAULT_RECLINE) * 100);
-  if (!seated && !isRing(mySeat) && camMode === 'seat') setCamMode('audience', true);
+  if (!seated && camMode === 'seat') setCamMode('audience', true);
 }
 function rebuildAvatar(id, u) {
   const old = avatars.get(id), a = createAvatar(u, u.id === myId);
@@ -3031,9 +3022,6 @@ function computeCamGoal() {
     // đứng trước màn ảnh, nhìn xuống khán giả
     camGoalPos.set(0, SCR_Y - 2.2, SCR_Z + 1.4);
     aimFrom(AUDIENCE_CENTER);
-  } else if (camMode === 'seat' && isRing(mySeat)) {      // đang thi đấu: quay cận cảnh võ đài
-    camGoalPos.set(RING_X + (mySeat === RING_A ? -2.5 : 2.5), TOP_H + RING_H + 4.6, RING_Z + 7.4);
-    camGoalLook.set(RING_X, TOP_H + RING_H + 1.4, RING_Z);
   } else if (camMode === 'seat') {
     seatView();
   } else {
@@ -3112,7 +3100,7 @@ glR.domElement.addEventListener('wheel', (e) => {
 
 function updateCamera(dt) {
   // ẩn nhân vật của mình khi nhìn từ ghế để khỏi thấy "trong đầu"
-  const me = myAvatar(); if (me) me.g.visible = camMode !== 'seat' || isRing(mySeat);   // trên võ đài: góc cận cảnh vẫn thấy chính mình
+  const me = myAvatar(); if (me) me.g.visible = camMode !== 'seat';
   glR.domElement.style.cursor = camMode === 'screen' ? 'default' : 'grab';
   cssObj.visible = camMode !== 'stage';   // màn hình nằm sau lưng camera → ẩn iframe khỏi bị méo hình
   BEAM_MAT.visible = partyOn || camMode === 'audience' || camMode === 'stage'; if (BEAM_MAT2) BEAM_MAT2.visible = BEAM_MAT.visible;   // đèn bar bật thì đèn quét ở mọi góc   // đang xem phim (ghế / sát màn) thì tắt luồng đèn cho khỏi chói
@@ -3194,9 +3182,10 @@ function frame() {
   if (starPts) starPts.material.opacity = 0.65 + 0.35 * Math.sin(t * 1.7);
   for (const c of candles) { const k = 0.85 + 0.15 * Math.sin(t * 9 + c.ph) * Math.sin(t * 3.7 + c.ph * 2); c.f.scale.set(k, 1.8 * k, k); c.halo.material.opacity = 0.35 * k; if (c.l) c.l.intensity = 2.2 * k; }
   // luồng sáng nghiêng về phía cuối rạp (x âm → hướng +z), quét nhẹ, không bao giờ hắt lên màn chiếu
-  boxPiP();
-  glR.render(scene, camera);
-  cssR.render(cssScene, camera);
+  if (ar.scene && (ar.open || arLive())) arenaFrame(dt, t);         // sân boxing (đang mở, hoặc đang chiếu trận lên màn hình)
+  arenaPiP();
+  if (ar.open) glR.render(ar.scene, ar.cam);
+  else { glR.render(scene, camera); cssR.render(cssScene, camera); }
   tryBootPlayer();
   requestAnimationFrame(frame);
 }
@@ -3541,7 +3530,6 @@ $('bar').addEventListener('click', (e) => {
   if (!isPrivate() || !media) return;
   const r = $('bar').getBoundingClientRect(); seekTo(((e.clientX - r.left) / r.width) * (media.duration() || 0));
 });
-
 
 // =====================================================================
 //  HUD
@@ -4306,7 +4294,7 @@ function genderTag(lookOrG) {
 }
 // ảnh + giới tính người gửi: lấy từ tin (server mới gửi kèm), tin cũ thì tra theo người đang trong phòng
 function chatWho(m) { const u = lastState && lastState.users.find((x) => x.name === m.name); return { av: m.av ?? (u ? u.av : 0), g: m.g || (u && u.look && u.look.gender) || 'm', look: m.ns ? chatLook(m) : u && u.look }; }
-function personSeatText(u) { return u.seat == null ? 'Đang đứng xem' : isRing(u.seat) ? '🥊 Đang thi đấu' : isDJ(u.seat) ? '🎧 Đang chơi DJ' : isDance(u.seat) ? 'Trên sàn nhảy' : 'Ghế ' + seatName(u.seat); }
+function personSeatText(u) { return u.seat == null ? 'Đang đứng xem' : isDJ(u.seat) ? '🎧 Đang chơi DJ' : isDance(u.seat) ? 'Trên sàn nhảy' : 'Ghế ' + seatName(u.seat); }
 function setAvatarEl(el, name, ver) { const url = avatarUrl(name, ver); el.style.backgroundImage = url ? `url("${url}")` : ''; el.textContent = url ? '' : (name || '?')[0].toUpperCase(); }
 function renderPeople() {
   const users = (lastState && lastState.users) || [], box = $('peopleList'); box.textContent = '';
@@ -4754,7 +4742,7 @@ function connectSocket() {
   socket.on('kicked', () => { toast('Tài khoản này vừa vào phòng ở nơi khác'); inRoom = false; socket.disconnect(); setTimeout(() => (location.href = location.pathname), 1500); });
   socket.on('state', (s) => {
     if (redirecting) return;
-    const first = needFirst; needFirst = false; syncAvatars(s.users, first); applyState(s, first); applyParty(s.party); applyShare(s); djOnState(s); boxOnState(s);
+    const first = needFirst; needFirst = false; syncAvatars(s.users, first); applyState(s, first); applyParty(s.party); applyShare(s); djOnState(s); if (s.arena) arenaOnState(s.arena);
     if (first && myReclineLocal != null) socket.emit('seat:recline', myReclineLocal);
   });
   socket.on('sync', (d) => {                                     // máy chủ gửi mốc thời gian định kỳ → lệch quá 2.5s thì tua cho khớp
@@ -4766,9 +4754,14 @@ function connectSocket() {
   socket.on('dj:fx', onDJFx);
   socket.on('box:invite', onBoxInvite);
   socket.on('box:inviteGone', closeInvite);
-  socket.on('box:start', (d) => { toast(`🥊 ${d.a} đấu với ${d.b} trên võ đài!`); if (d.a === username || d.b === username) setTimeout(() => setCamMode('seat'), 300); });   // võ sĩ: chuyển sang góc cận cảnh võ đài
-  socket.on('box:reveal', onBoxReveal);
-  socket.on('box:end', onBoxEnd);
+  socket.on('ba:state', arenaOnState);
+  socket.on('ba:st', arenaOnPos);
+  socket.on('ba:anim', (d) => d && arenaAnim(d.s, d.k));
+  socket.on('ba:hit', arenaOnHit);
+  socket.on('ba:miss', arenaOnMiss);
+  socket.on('ba:reset', arenaOnReset);
+  socket.on('ba:end', arenaOnEnd);
+  socket.on('ba:open', () => openArena(true));
   socket.on('roles', (d) => { myRoles = (d && d.roles) || []; updateDJBtn(); if (myRoles.includes('dj')) toast('🎧 Bạn vừa được cấp vai trò DJ'); });
   socket.on('order', (o) => {                                  // ai đó gọi món → nhân viên bưng ra
     if (!o || !Array.isArray(o.items)) return;
@@ -5095,204 +5088,350 @@ setInterval(() => {
 }, 25);
 
 // =====================================================================
-//  VÕ ĐÀI BOXING — thách đấu, chọn đòn kiểu oẳn tù tì (Đấm thẳng > Móc > Đỡ > Đấm thẳng), chiếu trận lên màn hình
+//  SÂN BOXING — mục "Boxing" trong menu chuyển sang sân đấu riêng. 2 võ sĩ di chuyển (WASD / cần gạt ảo),
+//  đấm thẳng (J), móc (K), giữ đỡ (L / Shift), lướt né (Space). Trận đang đánh được chiếu lên màn hình rạp.
 // =====================================================================
-const BOX_MV = { jab: { ic: '👊', name: 'Đấm thẳng' }, hook: { ic: '🪝', name: 'Móc' }, block: { ic: '🛡️', name: 'Đỡ' } };
-const bx = { mine: null, picked: null, inv: null, invT: 0, pipOn: localStorage.getItem('rc_pip') !== '0', lastTurn: -1, pipN: 0 };
-const ringFighters = () => (cur && cur.fight) || null;
-const meSide = () => { const f = ringFighters(); return !f ? null : f.a.id === myId ? 'a' : f.b.id === myId ? 'b' : null; };
+const AR_R = 3.6, AR_TOP = 1.0;                                     // nửa cạnh sàn đấu, độ cao mặt sàn
+const AR_CD = { jab: 380, hook: 950, dodge: 1100 };
+const ar = { open: false, scene: null, cam: null, st: null, f: { a: null, b: null }, me: null, keys: {}, stick: { x: 0, z: 0 }, btnBlk: false,
+  kb: { x: 0, z: 0 }, dodgeV: null, sendT: 0, cd: { jab: 0, hook: 0, dodge: 0 }, pops: [], crowd: null, cheer: 0, pipN: 0, inv: null, invT: 0, camT: new THREE.Vector3() };
+const arLive = () => !!(ar.st && (ar.st.phase === 'fight' || ar.st.phase === 'count' || ar.st.phase === 'end'));
 
-// ---- võ đài 3D ở góc phải sàn sau (chỉ rạp lớn)
-const ringGroup = new THREE.Group();
-if (RING_A >= 0) {
-  ringGroup.position.set(RING_X, TOP_H, RING_Z); scene.add(ringGroup);
-  const S = 3.6;                                                                            // nửa cạnh sàn đấu
-  rb(S * 2 + 0.6, RING_H, S * 2 + 0.6, 0x1a1a22, 0, RING_H / 2, 0, ringGroup, 0.06, { metalness: 0.3 });   // bục
+// ---- dựng sân (chỉ khi cần: mở sân hoặc đang có trận để chiếu lên màn hình)
+function buildArena() {
+  if (ar.scene) return;
+  const S = ar.scene = new THREE.Scene(); S.background = new THREE.Color(0x07070c); S.fog = new THREE.Fog(0x07070c, 22, 55);
+  ar.cam = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 140); ar.cam.position.set(0, 7, 10.5); ar.cam.lookAt(0, 1.5, 0);
+  S.add(new THREE.HemisphereLight(0xc8ccff, 0x15121c, 0.75));
+  const key = new THREE.SpotLight(0xfff2dd, 900, 34, 0.55, 0.45, 1.3); key.position.set(0, 16, 3); key.target.position.set(0, 0, 0); S.add(key, key.target);
+  for (const [x, c] of [[-9, 0xff3050], [9, 0x4070ff]]) { const l = new THREE.PointLight(c, 160, 28, 1.6); l.position.set(x, 6, -4); S.add(l); }
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(48, 48), new THREE.MeshStandardMaterial({ color: 0x0e0e14, roughness: 0.9 })); floor.rotation.x = -Math.PI / 2; S.add(floor);
+  const R = AR_R + 0.45;
+  rb(R * 2 + 0.6, AR_TOP, R * 2 + 0.6, 0x1a1a22, 0, AR_TOP / 2, 0, S, 0.06, { metalness: 0.3 });
   {                                                                                         // mặt sàn vải có logo
     const c = document.createElement('canvas'); c.width = c.height = 512; const x = c.getContext('2d');
-    x.fillStyle = '#1b2a6b'; x.fillRect(0, 0, 512, 512); x.strokeStyle = 'rgba(255,255,255,.5)'; x.lineWidth = 6; x.strokeRect(20, 20, 472, 472);
-    x.fillStyle = 'rgba(255,255,255,.12)'; x.beginPath(); x.arc(256, 256, 120, 0, Math.PI * 2); x.fill();
-    x.font = '900 86px system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = 'rgba(255,255,255,.85)'; x.fillText('XCVN', 256, 236); x.font = '800 40px system-ui, sans-serif'; x.fillText('BOXING', 256, 300);
+    x.fillStyle = '#1b2a6b'; x.fillRect(0, 0, 512, 512); x.strokeStyle = 'rgba(255,255,255,.5)'; x.lineWidth = 6; x.strokeRect(14, 14, 484, 484);
+    x.fillStyle = 'rgba(255,255,255,.1)'; x.beginPath(); x.arc(256, 256, 130, 0, Math.PI * 2); x.fill();
+    x.font = '900 92px system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = 'rgba(255,255,255,.85)'; x.fillText('XCVN', 256, 232); x.font = '800 44px system-ui, sans-serif'; x.fillText('BOXING', 256, 300);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(S * 2, S * 2), new THREE.MeshStandardMaterial({ map: t, roughness: 0.85 })); m.rotation.x = -Math.PI / 2; m.position.y = RING_H + 0.01; ringGroup.add(m);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(R * 2, R * 2), new THREE.MeshStandardMaterial({ map: t, roughness: 0.85 })); m.rotation.x = -Math.PI / 2; m.position.y = AR_TOP + 0.01; S.add(m);
   }
-  const apron = new THREE.Mesh(new THREE.BoxGeometry(S * 2 + 0.62, 0.12, S * 2 + 0.62), new THREE.MeshBasicMaterial({ color: CT.a })); apron.position.y = RING_H - 0.08; ringGroup.add(apron); PARTY_TINT.push(apron.material);
-  const corner = [[-S, -S, 0xd83a3a], [S, S, 0x3a6cd8], [-S, S, 0xeeeeee], [S, -S, 0xeeeeee]];
-  for (const [x0, z0, col] of corner) {                                                    // 4 cột góc (góc đỏ / góc xanh)
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.9, 12), smat(0xc8c8d0, { metalness: 0.8, roughness: 0.3 })); post.position.set(x0, RING_H + 0.95, z0); ringGroup.add(post);
-    const pad = new THREE.Mesh(new THREE.BoxGeometry(0.32, 1.2, 0.32), smat(col, { roughness: 0.6 })); pad.position.set(x0, RING_H + 1.0, z0); ringGroup.add(pad);
+  const apron = new THREE.Mesh(new THREE.BoxGeometry(R * 2 + 0.62, 0.14, R * 2 + 0.62), new THREE.MeshBasicMaterial({ color: 0xff2a3d })); apron.position.y = AR_TOP - 0.09; S.add(apron);
+  for (const [x0, z0, col] of [[-R, -R, 0xd83a3a], [R, R, 0x3a6cd8], [-R, R, 0xd83a3a], [R, -R, 0x3a6cd8]]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.9, 12), smat(0xc8c8d0, { metalness: 0.8, roughness: 0.3 })); post.position.set(x0, AR_TOP + 0.95, z0); S.add(post);
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(0.32, 1.2, 0.32), smat(col, { roughness: 0.6 })); pad.position.set(x0, AR_TOP + 1.0, z0); S.add(pad);
   }
   const ropeMat = [smat(0xd83a3a, { roughness: 0.5 }), smat(0xf2f2f2, { roughness: 0.5 }), smat(0x3a6cd8, { roughness: 0.5 })];
-  for (let k = 0; k < 3; k++) {                                                             // 3 tầng dây
-    const y = RING_H + 0.55 + k * 0.45;
-    for (const [x0, z0, x1, z1] of [[-S, -S, S, -S], [S, -S, S, S], [S, S, -S, S], [-S, S, -S, -S]]) {
+  for (let k = 0; k < 3; k++) {
+    const y = AR_TOP + 0.55 + k * 0.45;
+    for (const [x0, z0, x1, z1] of [[-R, -R, R, -R], [R, -R, R, R], [R, R, -R, R], [-R, R, -R, -R]]) {
       const len = Math.hypot(x1 - x0, z1 - z0), r = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, len, 6), ropeMat[k]);
-      r.position.set((x0 + x1) / 2, y, (z0 + z1) / 2); r.rotation.z = Math.PI / 2; r.rotation.y = Math.atan2(-(z1 - z0), x1 - x0); ringGroup.add(r);
+      r.position.set((x0 + x1) / 2, y, (z0 + z1) / 2); r.rotation.z = Math.PI / 2; r.rotation.y = Math.atan2(-(z1 - z0), x1 - x0); S.add(r);
     }
   }
-  const spot = new THREE.PointLight(0xfff1d8, 0, 16, 1.6); spot.position.set(0, RING_H + 7, 0); ringGroup.add(spot); bx.light = spot;   // đèn rọi sáng khi có trận
-  const sign = (() => { const c = document.createElement('canvas'); c.width = 512; c.height = 128; const x = c.getContext('2d'); x.fillStyle = '#0b0b10'; x.fillRect(0, 0, 512, 128); x.strokeStyle = cssHex(CT.a); x.lineWidth = 6; x.strokeRect(6, 6, 500, 116); x.font = '900 64px system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#fff'; x.fillText('🥊 VÕ ĐÀI', 256, 66); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
-  const sg = new THREE.Mesh(new THREE.PlaneGeometry(4, 1), new THREE.MeshBasicMaterial({ map: sign })); sg.position.set(0, RING_H + 3.3, -S - 0.2); ringGroup.add(sg);
+  // khán đài 4 phía: người hâm mộ đơn giản nhún nhảy, cổ vũ khi có cú đấm trúng
+  {
+    const pos = [];
+    for (let side = 0; side < 4; side++) for (let row = 0; row < 4; row++) for (let i = -9; i <= 9; i++) {
+      if (side === 1 && Math.abs(i) < 3) continue;                                         // chừa lối camera phía trước
+      const d = 8 + row * 1.5, h = row * 0.9, along = i * 1.05 + (row % 2) * 0.5;
+      const p = [[along, -d], [d, along], [along, d], [-d, along]][side];
+      pos.push({ x: p[0], z: p[1], y: h, ph: Math.random() * 6 });
+    }
+    const body = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.28, 0.55, 3, 8), new THREE.MeshStandardMaterial({ roughness: 0.8 }), pos.length);
+    const head = new THREE.InstancedMesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshStandardMaterial({ color: 0xe8c39e, roughness: 0.8 }), pos.length);
+    const cols = [0xd83a3a, 0x3a6cd8, 0xf2f2f2, 0x2a2a33, 0xffc83a, 0x3ad29f, 0x9b30ff].map((c) => new THREE.Color(c));
+    pos.forEach((p, i) => body.setColorAt(i, cols[i % cols.length]));
+    S.add(body, head); ar.crowd = { body, head, pos, m: new THREE.Matrix4() };
+    for (let r = 0; r < 4; r++) for (const s of [0, 2, 3, 1]) {                             // bậc khán đài
+      const d = 8 + r * 1.5, w = 22, st = new THREE.Mesh(new THREE.BoxGeometry(s % 2 ? 1.5 : w, r * 0.9 + 0.2, s % 2 ? w : 1.5), smat(0x15151c));
+      const P = [[0, -d], [d, 0], [0, d], [-d, 0]][s]; if (s === 1) continue; st.position.set(P[0], (r * 0.9 + 0.2) / 2 - 0.4, P[1]); S.add(st);
+    }
+  }
+  {                                                                                         // màn LED lớn phía sau
+    const c = document.createElement('canvas'); c.width = 1024; c.height = 256; const x = c.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 1024, 0); g.addColorStop(0, '#ff2a3d'); g.addColorStop(1, '#3a6cd8');
+    x.fillStyle = '#05050a'; x.fillRect(0, 0, 1024, 256); x.font = '900 150px system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = g; x.fillText('XCVN  BOXING', 512, 132);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(16, 4), new THREE.MeshBasicMaterial({ map: t })); m.position.set(0, 7.5, -15); S.add(m);
+  }
 }
 
-// ---- dáng thi đấu: thủ thế nhún nhảy; ra đòn / trúng đòn / KO / ăn mừng theo bx.anim của từng nhân vật
-const lerp = THREE.MathUtils.lerp;
-function boxStep(a, t, y0) {
-  const g = a.g, side = a.seat === RING_A ? 'a' : 'b', now = performance.now();
-  g.rotation.order = 'YXZ'; g.rotation.y = side === 'a' ? -Math.PI / 2 : Math.PI / 2;      // 2 võ sĩ quay mặt vào nhau
-  const an = a.boxAnim, p = an ? (now - an.t0) / 1000 : 9;
-  const bounce = Math.abs(Math.sin(t * 5.5 + (side === 'a' ? 0 : 1.3))) * 0.06;
-  // thủ thế: 2 nắm tay trước cằm
-  let L = [0.95, 0, -0.3], Le = 2.1, R = [0.95, 0, 0.3], Re = 2.1, ux = -0.12, hx = 0.12, push = 0, fall = 0, jump = 0;
-  if (an && an.k === 'jab' && p < 0.45) { const k = Math.sin(Math.min(1, p / 0.45) * Math.PI); R = [lerp(0.95, 1.6, k), 0, lerp(0.3, 0.02, k)]; Re = lerp(2.1, 0.05, k); ux = -0.12 - 0.15 * k; }
-  else if (an && an.k === 'hook' && p < 0.55) { const k = Math.min(1, p / 0.55), s = Math.sin(k * Math.PI); L = [lerp(0.95, 1.45, s), lerp(0.9, -0.5, k) * s, lerp(-0.3, -1.25, s)]; Le = lerp(2.1, 1.45, s); ux = -0.12 - 0.1 * s; }
-  else if (an && an.k === 'block' && p < 1.1) { const k = Math.min(1, p / 0.15); L = [lerp(0.95, 1.5, k), 0, lerp(-0.3, -0.05, k)]; Le = lerp(2.1, 2.55, k); R = [lerp(0.95, 1.5, k), 0, lerp(0.3, 0.05, k)]; Re = lerp(2.1, 2.55, k); hx = 0.12 + 0.18 * k; }
-  else if (an && an.k === 'hit' && p < 0.7) { const k = Math.exp(-p * 5); ux = 0.45 * k; hx = -0.4 * k; push = 0.35 * k; }
-  else if (an && an.k === 'ko') { fall = Math.min(1, p / 0.6); ux = 0.2; L = [0.3, 0, -1.2]; R = [0.3, 0, 1.2]; Le = Re = 0.3; }
-  else if (an && an.k === 'win') { const k = Math.abs(Math.sin(p * 6)); L = [0.1, 0, -2.75 + 0.25 * k]; R = [0.1, 0, 2.75 - 0.25 * k]; Le = Re = 0.3; jump = 0.25 * k; hx = -0.15; }
+// ---- võ sĩ: dùng chính nhân vật (trang phục) của người chơi
+function arenaFighter(side) {
+  const sl = ar.st && ar.st.slots[side], f = ar.f[side];
+  if (!sl) { if (f) { ar.scene.remove(f.av.g); ar.f[side] = null; } return null; }
+  if (f && f.id === sl.id) return f;
+  if (f) ar.scene.remove(f.av.g);
+  const u = (cur && cur.users.find((x) => x.id === sl.id)) || { id: sl.id, name: sl.name, look: null };
+  const av = createAvatar({ ...u }, false); setSitting(av, false); av.seat = null;
+  ar.scene.add(av.g);
+  const x0 = side === 'a' ? -2 : 2;
+  av.g.position.set(x0, AR_TOP, 0); av.g.rotation.order = 'YXZ';
+  return (ar.f[side] = { id: sl.id, side, av, x: x0, z: 0, tx: x0, tz: 0, blk: false, mv: false, anim: null, ko: false, win: false, spd: 0 });
+}
+const L3 = THREE.MathUtils.lerp;
+function arenaPose(f, t) {
+  const a = f.av, now = performance.now(), an = f.anim, p = an ? (now - an.t0) / 1000 : 9;
+  let L = [0.95, 0, -0.3], Le = 2.1, R = [0.95, 0, 0.3], Re = 2.1, ux = -0.12, uz = 0, hx = 0.12, push = 0, fall = 0, jump = 0, dip = 0;
+  const atk = an && ((an.k === 'jab' && p < 0.32) || (an.k === 'hook' && p < 0.68));
+  if (f.ko) { fall = Math.min(1, (an && an.k === 'ko' ? p : 1) / 0.6); ux = 0.2; L = [0.3, 0, -1.2]; R = [0.3, 0, 1.2]; Le = Re = 0.3; }
+  else if (f.win) { const k = Math.abs(Math.sin(t * 6)); L = [0.1, 0, -2.75 + 0.25 * k]; R = [0.1, 0, 2.75 - 0.25 * k]; Le = Re = 0.3; jump = 0.22 * k; hx = -0.15; }
+  else if (an && an.k === 'jab' && p < 0.32) { const k = Math.sin(Math.min(1, p / 0.32) * Math.PI); R = [L3(0.95, 1.6, k), 0, L3(0.3, 0.02, k)]; Re = L3(2.1, 0.05, k); ux = -0.12 - 0.18 * k; }
+  else if (an && an.k === 'hook' && p < 0.68) {                       // móc: kéo tay ra sau lấy đà rồi vung ngang
+    if (p < 0.36) { const k = p / 0.36; L = [L3(0.95, 0.7, k), L3(0, 1.1, k), L3(-0.3, -1.1, k)]; Le = L3(2.1, 1.5, k); uz = 0.12 * k; }
+    else { const k = Math.min(1, (p - 0.36) / 0.2), s = Math.sin(Math.min(1, (p - 0.36) / 0.32) * Math.PI); L = [L3(0.7, 1.45, s), L3(1.1, -0.6, k), L3(-1.1, -1.25, s)]; Le = 1.45; uz = L3(0.12, -0.18, k); ux = -0.2; }
+  }
+  else if (an && an.k === 'dodge' && p < 0.36) { const k = Math.sin(Math.min(1, p / 0.36) * Math.PI); uz = 0.45 * k * (f.side === 'a' ? 1 : -1); dip = 0.18 * k; }
+  else if (an && an.k === 'hit' && p < 0.45) { const k = Math.exp(-p * 6); ux = 0.5 * k; hx = -0.45 * k; push = 0.35 * k; }
+  if (f.blk && !f.ko && !f.win && !atk) { L = [1.5, 0, -0.05]; Le = 2.55; R = [1.5, 0, 0.05]; Re = 2.55; hx = 0.3; ux = -0.05; }
   a.armL.rotation.set(L[0], L[1], L[2]); a.armR.rotation.set(R[0], R[1], R[2]);
   if (a.elbowL) { a.elbowL.rotation.set(Le, 0, 0); a.elbowR.rotation.set(Re, 0, 0); }
-  a.legL.rotation.set(0.15, 0, -0.08); a.legR.rotation.set(-0.15, 0, 0.08);
-  a.upper.rotation.x = ux; a.upper.rotation.z = 0; a.body.rotation.y = 0; a.body.position.x = 0; a.body.position.z = push;
+  const sw = f.mv && !f.ko && !f.win ? Math.sin(t * 13) * 0.55 : 0;
+  a.legL.rotation.set(0.15 + sw, 0, -0.08); a.legR.rotation.set(-0.15 - sw, 0, 0.08);
+  a.upper.rotation.x = ux; a.upper.rotation.z = uz; a.body.rotation.y = 0; a.body.position.x = 0; a.body.position.z = push;
   a.head.rotation.set(hx, 0, 0); a.head.position.y = HEAD_Y;
-  g.rotation.x = -1.45 * fall;                                                              // KO: ngã ngửa
-  g.position.y = y0 + RING_H + (fall ? 0.05 : bounce + jump);
+  a.g.rotation.x = -1.45 * fall;
+  const bounce = f.ko ? 0 : Math.abs(Math.sin(t * 5.5 + (f.side === 'a' ? 0 : 1.3))) * (f.mv ? 0.03 : 0.06);
+  a.g.position.y = AR_TOP + bounce + jump - dip;
   a.wasDancing = true;
 }
-
-// ---- số sát thương bay lên trên đầu
-function dmgPop(id, text, color) {
-  const a = avatars.get(id); if (!a) return;
+function arenaAnim(side, k) { const f = ar.f[side]; if (f) f.anim = { k, t0: performance.now() }; }
+function arenaPop(side, text, color) {                               // chữ / số bay lên trên đầu võ sĩ
+  const f = ar.f[side]; if (!f) return;
   const c = document.createElement('canvas'); c.width = 256; c.height = 96; const x = c.getContext('2d');
-  x.font = '900 64px system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.lineWidth = 8; x.strokeStyle = '#000'; x.strokeText(text, 128, 50); x.fillStyle = color; x.fillText(text, 128, 50);
+  x.font = '900 60px system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.lineWidth = 8; x.strokeStyle = '#000'; x.strokeText(text, 128, 50); x.fillStyle = color; x.fillText(text, 128, 50);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true })); sp.scale.set(2.2, 0.82, 1); sp.renderOrder = 999;
-  sp.position.set(0, 3.9 * AV_S, 0); a.g.add(sp);
-  const t0 = performance.now(); sp.userData.update = () => { const k = (performance.now() - t0) / 1100; sp.position.y = 3.9 * AV_S + k * 1.2; sp.material.opacity = 1 - k; if (k >= 1) { a.g.remove(sp); t.dispose(); sp.material.dispose(); const i = MYSTIC_SPIN.indexOf(sp); if (i >= 0) MYSTIC_SPIN.splice(i, 1); } };
-  MYSTIC_SPIN.push(sp);
+  sp.position.set(f.x, AR_TOP + 4.2, f.z); ar.scene.add(sp); ar.pops.push({ sp, t0: performance.now(), y0: AR_TOP + 4.2 });
 }
-const anim = (id, k) => { const a = avatars.get(id); if (a) a.boxAnim = { k, t0: performance.now() }; };
 
-// ---- màn hình chiếu trận (góc trên phải màn chiếu)
-const pip = { group: new THREE.Group(), rt: null, cam: null, hudCtx: null, hudTex: null };
-if (RING_A >= 0) {
-  pip.rt = new THREE.WebGLRenderTarget(640, 360, { samples: 2 });
-  pip.cam = new THREE.PerspectiveCamera(42, 16 / 9, 0.1, 90);
-  pip.cam.position.set(RING_X, TOP_H + 4.2, RING_Z + 8.2); pip.cam.lookAt(RING_X, TOP_H + RING_H + 1.5, RING_Z);
+// ---- điều khiển võ sĩ của mình (máy mình tự tính vị trí, gửi lên server)
+function arenaControl(dt) {
+  const f = ar.me && ar.f[ar.me]; if (!f || !ar.st) return;
+  const live = ar.st.phase === 'fight', K = ar.keys;
+  let ix = 0, iz = 0;
+  if (ar.open && live && !f.ko) {
+    ix = (K.KeyD || K.ArrowRight ? 1 : 0) - (K.KeyA || K.ArrowLeft ? 1 : 0) + ar.stick.x;
+    iz = (K.KeyS || K.ArrowDown ? 1 : 0) - (K.KeyW || K.ArrowUp ? 1 : 0) + ar.stick.z;
+  }
+  const len = Math.hypot(ix, iz); if (len > 1) { ix /= len; iz /= len; }
+  f.blk = live && ar.open && !f.ko && !!(K.KeyL || K.ShiftLeft || K.ShiftRight || ar.btnBlk);
+  const sp = f.blk ? 1.6 : 4.2, now = performance.now();
+  let vx = ix * sp, vz = iz * sp;
+  if (ar.dodgeV && now < ar.dodgeV.until) { vx += ar.dodgeV.x; vz += ar.dodgeV.z; }
+  vx += ar.kb.x; vz += ar.kb.z; const dec = Math.pow(0.015, dt); ar.kb.x *= dec; ar.kb.z *= dec;
+  f.x = THREE.MathUtils.clamp(f.x + vx * dt, -AR_R + 0.35, AR_R - 0.35); f.z = THREE.MathUtils.clamp(f.z + vz * dt, -AR_R + 0.35, AR_R - 0.35);
+  const o = ar.f[ar.me === 'a' ? 'b' : 'a'];
+  if (o) { const dx = f.x - o.x, dz = f.z - o.z, d = Math.hypot(dx, dz); if (d < 0.85 && d > 0.001) { f.x = o.x + dx / d * 0.85; f.z = o.z + dz / d * 0.85; } }
+  f.mv = len > 0.1 || (ar.dodgeV && now < ar.dodgeV.until);
+  if ((live || ar.st.phase === 'count') && now - ar.sendT > 50) { ar.sendT = now; socket.emit('ba:st', { x: +f.x.toFixed(3), z: +f.z.toFixed(3), b: f.blk, m: f.mv ? 1 : 0 }); }
+}
+function arenaAct(k) {
+  const f = ar.me && ar.f[ar.me];
+  if (!ar.open || !f || f.ko || !ar.st || ar.st.phase !== 'fight') return;
+  const now = performance.now(); if (now < ar.cd[k]) return; ar.cd[k] = now + AR_CD[k];
+  if (k === 'dodge') {                                                // lướt theo hướng đang đi (không đi thì lùi khỏi đối thủ)
+    const K = ar.keys; let dx = (K.KeyD || K.ArrowRight ? 1 : 0) - (K.KeyA || K.ArrowLeft ? 1 : 0) + ar.stick.x, dz = (K.KeyS || K.ArrowDown ? 1 : 0) - (K.KeyW || K.ArrowUp ? 1 : 0) + ar.stick.z;
+    const o = ar.f[ar.me === 'a' ? 'b' : 'a'];
+    if (Math.hypot(dx, dz) < 0.2 && o) { dx = f.x - o.x; dz = f.z - o.z; }
+    const l = Math.hypot(dx, dz) || 1; ar.dodgeV = { x: dx / l * 9, z: dz / l * 9, until: now + 200 };
+    socket.emit('ba:dodge'); arenaAnim(ar.me, 'dodge'); sfx('whoosh', vol); return;
+  }
+  socket.emit('ba:atk', k); arenaAnim(ar.me, k); sfx('whoosh', vol * 0.6);
+}
+
+// ---- mỗi khung hình (khi mở sân hoặc đang chiếu lên màn hình rạp)
+function arenaFrame(dt, t) {
+  if (!ar.scene) return;
+  arenaControl(dt);
+  const A = ar.f.a, B = ar.f.b;
+  for (const f of [A, B]) {
+    if (!f) continue;
+    if (f.side !== ar.me) { const k = Math.min(1, dt * 14); f.x += (f.tx - f.x) * k; f.z += (f.tz - f.z) * k; }
+    const o = f === A ? B : A;
+    if (o && !f.ko) { const ry = Math.atan2(-(o.x - f.x), -(o.z - f.z)); let df = ry - f.av.g.rotation.y; df = Math.atan2(Math.sin(df), Math.cos(df)); f.av.g.rotation.y += df * Math.min(1, dt * 16); }
+    else if (!o) f.av.g.rotation.y = f.side === 'a' ? -Math.PI / 2 : Math.PI / 2;
+    f.av.g.position.x = f.x; f.av.g.position.z = f.z;
+    arenaPose(f, t);
+  }
+  for (let i = ar.pops.length - 1; i >= 0; i--) {
+    const p = ar.pops[i], k = (performance.now() - p.t0) / 1100;
+    p.sp.position.y = p.y0 + k * 1.3; p.sp.material.opacity = 1 - k;
+    if (k >= 1) { ar.scene.remove(p.sp); p.sp.material.map.dispose(); p.sp.material.dispose(); ar.pops.splice(i, 1); }
+  }
+  if (ar.crowd) {                                                      // khán giả nhún, cổ vũ mạnh hơn khi có cú trúng
+    const C = ar.crowd, amp = 0.06 + ar.cheer * 0.35; ar.cheer *= Math.pow(0.3, dt);
+    C.pos.forEach((p, i) => {
+      const y = p.y + 0.55 + Math.abs(Math.sin(t * (3 + ar.cheer * 6) + p.ph)) * amp;
+      C.m.makeTranslation(p.x, y, p.z); C.body.setMatrixAt(i, C.m); C.m.makeTranslation(p.x, y + 0.62, p.z); C.head.setMatrixAt(i, C.m);
+    });
+    C.body.instanceMatrix.needsUpdate = true; C.head.instanceMatrix.needsUpdate = true;
+  }
+  // camera bám theo 2 võ sĩ
+  if (ar.open) {
+    const mx = A && B ? (A.x + B.x) / 2 : A ? A.x : B ? B.x : 0, mz = A && B ? (A.z + B.z) / 2 : A ? A.z : B ? B.z : 0;
+    const d = A && B ? Math.hypot(A.x - B.x, A.z - B.z) : 2, far = IS_TOUCH && innerWidth < innerHeight ? 1.5 : 1;
+    ar.camT.set(mx * 0.6, (5.6 + d * 0.35) * far, (8.6 + d * 0.55) * far + mz * 0.4);
+    ar.cam.position.lerp(ar.camT, Math.min(1, dt * 3));
+    ar.cam.lookAt(mx * 0.6, AR_TOP + 1.0, mz * 0.5);
+    const asp = innerWidth / innerHeight; if (Math.abs(ar.cam.aspect - asp) > 0.001) { ar.cam.aspect = asp; ar.cam.updateProjectionMatrix(); }
+  }
+}
+
+// ---- trận đang đánh: chiếu lên góc trên phải màn chiếu trong rạp
+const arPip = { group: new THREE.Group(), rt: null, cam: null, hud: null, tex: null };
+{
+  arPip.rt = new THREE.WebGLRenderTarget(640, 360, { samples: 2 });
+  arPip.cam = new THREE.PerspectiveCamera(42, 16 / 9, 0.1, 120); arPip.cam.position.set(0, 7.2, 11.5); arPip.cam.lookAt(0, 1.4, 0);
   const W = SCR_W * 0.42, H = W * 9 / 16, HH = W * 0.14;
-  pip.group.position.set(SCR_W / 2 - W / 2 - 0.5, SCR_Y + SCR_H / 2 - (H + HH) / 2 - 0.5, SCR_Z + 0.06); pip.group.visible = false; scene.add(pip.group);
-  const fr = new THREE.Mesh(new THREE.PlaneGeometry(W + 0.24, H + HH + 0.24), new THREE.MeshBasicMaterial({ color: CT.a })); fr.position.z = -0.01; pip.group.add(fr); PARTY_TINT.push(fr.material);
-  const img = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ map: pip.rt.texture })); img.position.y = -HH / 2; pip.group.add(img);
-  const c = document.createElement('canvas'); c.width = 1024; c.height = Math.round(1024 * HH / W); pip.hudCtx = c.getContext('2d');
-  pip.hudTex = new THREE.CanvasTexture(c); pip.hudTex.colorSpace = THREE.SRGBColorSpace;
-  const hud = new THREE.Mesh(new THREE.PlaneGeometry(W, HH), new THREE.MeshBasicMaterial({ map: pip.hudTex })); hud.position.y = H / 2; pip.group.add(hud);
+  arPip.group.position.set(SCR_W / 2 - W / 2 - 0.5, SCR_Y + SCR_H / 2 - (H + HH) / 2 - 0.5, SCR_Z + 0.06); arPip.group.visible = false; scene.add(arPip.group);
+  const fr = new THREE.Mesh(new THREE.PlaneGeometry(W + 0.24, H + HH + 0.24), new THREE.MeshBasicMaterial({ color: 0xff2a3d })); fr.position.z = -0.01; arPip.group.add(fr);
+  const img = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ map: arPip.rt.texture })); img.position.y = -HH / 2; arPip.group.add(img);
+  const c = document.createElement('canvas'); c.width = 1024; c.height = Math.round(1024 * HH / W); arPip.hud = c.getContext('2d');
+  arPip.tex = new THREE.CanvasTexture(c); arPip.tex.colorSpace = THREE.SRGBColorSpace;
+  const hud = new THREE.Mesh(new THREE.PlaneGeometry(W, HH), new THREE.MeshBasicMaterial({ map: arPip.tex })); hud.position.y = H / 2; arPip.group.add(hud);
 }
-function drawPipHud(f) {
-  const x = pip.hudCtx; if (!x || !f) return; const w = x.canvas.width, h = x.canvas.height;
+function drawArPipHud() {
+  const x = arPip.hud, st = ar.st; if (!x || !st) return; const w = x.canvas.width, h = x.canvas.height;
   x.fillStyle = '#0b0b12'; x.fillRect(0, 0, w, h);
-  const bar = (x0, hp, col, right) => { const bw = w * 0.36; x.fillStyle = '#2a2a33'; x.fillRect(x0, h * 0.58, bw, h * 0.22); x.fillStyle = col; const fw = bw * hp / 100; x.fillRect(right ? x0 + bw - fw : x0, h * 0.58, fw, h * 0.22); };
+  const bar = (x0, hp, col, right) => { const bw = w * 0.36; x.fillStyle = '#2a2a33'; x.fillRect(x0, h * 0.6, bw, h * 0.22); x.fillStyle = col; const fw = bw * hp / 100; x.fillRect(right ? x0 + bw - fw : x0, h * 0.6, fw, h * 0.22); };
   x.font = `800 ${Math.round(h * 0.34)}px system-ui, sans-serif`; x.textBaseline = 'middle';
-  x.fillStyle = '#ff6b6b'; x.textAlign = 'left'; x.fillText(`${f.a.name}  ${f.a.hp}`, w * 0.03, h * 0.3); bar(w * 0.03, f.a.hp, '#e84545', false);
-  x.fillStyle = '#6b9bff'; x.textAlign = 'right'; x.fillText(`${f.b.hp}  ${f.b.name}`, w * 0.97, h * 0.3); bar(w * 0.61, f.b.hp, '#3a6cd8', true);
-  x.fillStyle = '#ffd36b'; x.textAlign = 'center'; x.fillText(f.phase === 'end' ? (f.winner ? '🏆' : '🤝') : `🥊 ${f.turn || 0}/${f.max}`, w / 2, h * 0.5);
-  pip.hudTex.needsUpdate = true;
+  x.fillStyle = '#ff6b6b'; x.textAlign = 'left'; x.fillText(`${st.slots.a ? st.slots.a.name : '—'}  ${st.hp.a}`, w * 0.03, h * 0.3); bar(w * 0.03, st.hp.a, '#e84545', false);
+  x.fillStyle = '#6b9bff'; x.textAlign = 'right'; x.fillText(`${st.hp.b}  ${st.slots.b ? st.slots.b.name : '—'}`, w * 0.97, h * 0.3); bar(w * 0.61, st.hp.b, '#3a6cd8', true);
+  x.fillStyle = '#ffd36b'; x.textAlign = 'center'; x.fillText('🥊 LIVE', w / 2, h * 0.5);
+  arPip.tex.needsUpdate = true;
 }
-function boxPiP() {                                                 // vẽ cảnh võ đài vào màn chiếu (15 hình / giây cho nhẹ)
-  if (!pip.rt || !pip.group.visible) return;
-  if ((bx.pipN = (bx.pipN + 1) % 4) !== 0) return;
-  glR.setRenderTarget(pip.rt); glR.render(scene, pip.cam); glR.setRenderTarget(null);
+function arenaPiP() {
+  const show = !ar.open && ar.scene && arLive();
+  arPip.group.visible = !!show; if (!show) return;
+  if ((ar.pipN = (ar.pipN + 1) % 3) !== 0) return;                     // ~20 hình / giây cho nhẹ
+  glR.setRenderTarget(arPip.rt); glR.render(ar.scene, arPip.cam); glR.setRenderTarget(null);
 }
 
-// ---- giao diện
-function fmtMove(m) { return m ? `${BOX_MV[m].ic} ${BOX_MV[m].name}` : '😶 Đứng im'; }
-function boxOnState(s) {
-  if (RING_A < 0) return;
-  const f = s.fight;
-  $('boxHud').classList.toggle('hidden', !f);
-  pip.group.visible = !!f && bx.pipOn;
-  if (bx.light) bx.light.intensity = f ? 60 : 0;
-  if (!f) { $('boxCtl').classList.add('hidden'); bx.lastTurn = -1; bx.picked = null; return; }
-  if (f.phase !== 'intro') for (const id of [f.a.id, f.b.id]) {      // hết giờ chuẩn bị mà còn đang đi → đưa thẳng lên võ đài
-    const a = avatars.get(id); if (a && a.path.length && isRing(a.seat)) placeAtSeat(a, a.seat, true);
+// ---- sự kiện từ server
+function arenaOnState(st) {
+  if (!st) return;
+  const prev = ar.st; ar.st = st;
+  ar.me = st.slots.a && st.slots.a.id === myId ? 'a' : st.slots.b && st.slots.b.id === myId ? 'b' : null;
+  if (ar.open || arLive()) buildArena();
+  if (ar.scene) {
+    for (const s of ['a', 'b']) { const f = arenaFighter(s); if (f && (st.phase === 'wait' || st.phase === 'count')) { f.ko = f.win = false; if (st.phase === 'count') f.anim = null; } }
+    drawArPipHud();
   }
-  $('bxNameA').textContent = f.a.name; $('bxNameB').textContent = f.b.name;
-  $('bxHpA').textContent = f.a.hp; $('bxHpB').textContent = f.b.hp;
-  $('bxBarA').style.width = f.a.hp + '%'; $('bxBarB').style.width = f.b.hp + '%';
-  $('bxStrA').textContent = f.a.streak > 1 ? `combo x${f.a.streak}` : f.phase === 'pick' && f.a.picked ? '✔ đã chọn' : '';
-  $('bxStrB').textContent = f.b.streak > 1 ? `combo x${f.b.streak}` : f.phase === 'pick' && f.b.picked ? '✔ đã chọn' : '';
-  $('bxTurn').textContent = f.phase === 'intro' ? 'Chuẩn bị…' : f.phase === 'end' ? 'Kết thúc' : `Lượt ${f.turn}/${f.max}`;
-  bx.deadline = performance.now() + (f.left || 0);
-  $('bxPip').textContent = bx.pipOn ? '📺 Đang chiếu lên màn hình' : '📺 Chiếu lên màn hình';
-  drawPipHud(f);
-  const me = meSide();
-  $('boxCtl').classList.toggle('hidden', !me || f.phase === 'end');
-  if (f.phase === 'pick' && f.turn !== bx.lastTurn) {                // lượt mới
-    bx.lastTurn = f.turn; bx.picked = null;
-    if (f.turn === 1) sfx('bell', vol);
-  }
-  document.querySelectorAll('#boxCtl [data-mv]').forEach((b) => { b.disabled = f.phase !== 'pick' || !!bx.picked; b.classList.toggle('on', b.dataset.mv === bx.picked); });
-  $('bxCtlMsg').textContent = f.phase === 'intro' ? 'Đang lên võ đài…' : f.phase === 'pick' ? (bx.picked ? `Đã chọn ${fmtMove(bx.picked)} — chờ đối thủ…` : 'Chọn đòn! (phím 1 / 2 / 3)') : 'Xem kết quả…';
+  if (st.phase === 'fight' && prev && prev.phase === 'count') { sfx('bell', vol); arenaBig('ĐÁNH!', 900); }
+  ar.deadline = performance.now() + (st.left || 0);
+  arenaUI();
 }
-setInterval(() => {                                                  // đồng hồ đếm ngược lượt
-  const f = ringFighters(); if (!f || $('boxHud').classList.contains('hidden')) return;
-  const left = Math.max(0, Math.ceil((bx.deadline - performance.now()) / 1000));
-  $('bxTime').textContent = f.phase === 'pick' ? `⏱ ${left}s` : '';
-  if (bx.inv) { const l2 = Math.max(0, Math.ceil((bx.invT - performance.now()) / 1000)); $('bxInvTime').textContent = l2 + 's'; if (!l2) closeInvite(); }
-}, 200);
-function pickMove(mv) {
-  const f = ringFighters(); if (!f || f.phase !== 'pick' || bx.picked || !meSide()) return;
-  bx.picked = mv; socket.emit('box:pick', mv); sfx('whoosh', vol); boxOnState(cur);
+function arenaOnPos(d) { const f = d && ar.f[d.s]; if (!f || d.s === ar.me) return; f.tx = d.x; f.tz = d.z; f.blk = !!d.b; f.mv = !!d.m; }
+function arenaOnReset(d) {
+  for (const s of ['a', 'b']) { const f = ar.f[s]; if (!f || !d.pos[s]) continue; f.x = f.tx = d.pos[s].x; f.z = f.tz = d.pos[s].z; f.ko = f.win = false; f.anim = null; }
+  ar.kb.x = ar.kb.z = 0; ar.dodgeV = null;
 }
-document.querySelectorAll('#boxCtl [data-mv]').forEach((b) => b.onclick = () => pickMove(b.dataset.mv));
-addEventListener('keydown', (e) => {
-  if (!meSide() || e.target.closest('input,textarea,[contenteditable]')) return;
-  const mv = { 1: 'jab', 2: 'hook', 3: 'block' }[e.key]; if (mv) { pickMove(mv); e.preventDefault(); }
-});
-$('bxPip').onclick = () => { bx.pipOn = !bx.pipOn; localStorage.setItem('rc_pip', bx.pipOn ? '1' : '0'); if (cur) boxOnState(cur); };
-
-// lời mời thách đấu
-function closeInvite() { bx.inv = null; $('boxInvite').classList.add('hidden'); }
-$('bxAccept').onclick = () => { if (bx.inv) socket.emit('box:answer', { from: bx.inv.from, accept: true }); closeInvite(); };
-$('bxDecline').onclick = () => { if (bx.inv) socket.emit('box:answer', { from: bx.inv.from, accept: false }); closeInvite(); };
-function onBoxInvite(d) {
+function arenaOnHit(d) {
+  if (!d || !ar.st) return;
+  ar.st.hp = d.hp; arenaAnim(d.s, 'hit');
+  arenaPop(d.s, d.blocked ? `🛡 -${d.dmg}` : `-${d.dmg}`, d.blocked ? '#cfd6e6' : d.k === 'hook' ? '#ffd23f' : '#ff5a5a');
+  sfx(d.blocked ? 'block' : 'punch', vol); ar.cheer = Math.min(1, ar.cheer + (d.blocked ? 0.2 : d.k === 'hook' ? 0.9 : 0.5));
+  if (d.s === ar.me) { const f = ar.f[ar.me]; if (f) { const dx = f.x - d.fx, dz = f.z - d.fz, l = Math.hypot(dx, dz) || 1; ar.kb.x += dx / l * d.kb * 7; ar.kb.z += dz / l * d.kb * 7; } }
+  drawArPipHud(); arenaUI();
+}
+function arenaOnMiss(d) { if (d && d.dodged) { arenaPop(d.s === 'a' ? 'b' : 'a', 'NÉ!', '#7deabf'); sfx('whoosh', vol); } }
+function arenaOnEnd(d) {
   if (!d) return;
-  bx.inv = d; bx.invT = performance.now() + (d.ms || 15000);
-  $('bxInvName').textContent = d.name; $('boxInvite').classList.remove('hidden'); sfx('bell', vol);
-}
-
-// kết quả mỗi lượt: hoạt ảnh + tiếng + số sát thương
-function onBoxReveal(r) {
-  const f = ringFighters(); if (!f || !r) return;
-  const A = f.a.id, B = f.b.id;
-  if (r.a) anim(A, r.a); if (r.b) anim(B, r.b);
-  setTimeout(() => {
-    const hitA = r.dA > 0, hitB = r.dB > 0;
-    if (hitA) { anim(A, 'hit'); dmgPop(A, '-' + r.dA, r.crit && r.win === 'b' ? '#ffd23f' : '#ff5a5a'); }
-    if (hitB) { anim(B, 'hit'); dmgPop(B, '-' + r.dB, r.crit && r.win === 'a' ? '#ffd23f' : '#6b9bff'); }
-    if (hitA || hitB) sfx('punch', vol);
-    if ((r.a === 'block' && r.b === 'jab') || (r.b === 'block' && r.a === 'jab') || (r.a === 'block' && r.b === 'block')) sfx('block', vol);
-    if (!hitA && !hitB && (r.a || r.b) && !(r.a === 'block' && r.b === 'block')) sfx('whoosh', vol);
-  }, 320);
-  const who = r.win ? f[r.win].name : null;
-  $('bxLast').innerHTML = `<b>${esc(f.a.name)}</b> ${fmtMove(r.a)} <span class="vs">vs</span> ${fmtMove(r.b)} <b>${esc(f.b.name)}</b><br>` +
-    (who ? `→ <b>${esc(who)}</b> thắng lượt, −${r.win === 'a' ? r.dB : r.dA} máu${r.crit ? ' · <span class="crit">CHÍ MẠNG!</span>' : ''}${(r.win === 'a' ? r.streakA : r.streakB) > 1 ? ` · combo x${r.win === 'a' ? r.streakA : r.streakB}` : ''}` : r.dA ? `→ Cùng đòn, cả hai −${r.dA}` : '→ Không ai trúng');
-}
-function onBoxEnd(d) {
-  const f = ringFighters(); if (!f || !d) return;
   sfx('bell', vol);
-  if (d.win) { const W = f[d.win].id, L = f[d.win === 'a' ? 'b' : 'a'].id; if (d.reason === 'KO') anim(L, 'ko'); anim(W, 'win'); }
-  $('bxLast').innerHTML = d.winner ? `🏆 <b>${esc(d.winner)}</b> thắng! <span class="muted">(${esc(d.reason)})</span>` : `🤝 Hoà! <span class="muted">(${esc(d.reason)})</span>`;
-  if (meSide()) toast(d.winner ? (f[meSide()].name === d.winner ? '🏆 Bạn thắng!' : '😵 Bạn thua rồi') : '🤝 Hoà');
+  if (d.win) { const L = ar.f[d.win === 'a' ? 'b' : 'a'], W = ar.f[d.win]; if (L && d.reason === 'KO') { L.ko = true; L.anim = { k: 'ko', t0: performance.now() }; } if (W) W.win = true; ar.cheer = 1; }
+  arenaBig(d.winner ? `🏆 ${d.winner} thắng!` : '🤝 Hoà!', 3500);
+  if (ar.me) toast(d.winner ? (ar.st.slots[ar.me] && ar.st.slots[ar.me].name === d.winner ? '🏆 Bạn thắng!' : '😵 Bạn thua rồi') : '🤝 Hoà');
 }
-function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
-// nút thách đấu trong bảng người xem
+// ---- giao diện sân
+function arenaBig(text, ms) { const el = $('arBig'); el.textContent = text; el.classList.add('show'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), ms); }
+function arenaUI() {
+  const st = ar.st; if (!st) return;
+  $('dBox').classList.toggle('live', arLive());
+  if (!ar.open) return;
+  const nm = (s) => (st.slots[s] ? st.slots[s].name : 'Trống');
+  $('arNameA').textContent = nm('a'); $('arNameB').textContent = nm('b');
+  $('arHpA').textContent = st.hp.a; $('arHpB').textContent = st.hp.b; $('arBarA').style.width = st.hp.a + '%'; $('arBarB').style.width = st.hp.b + '%';
+  $('arPhase').textContent = { wait: st.slots.a || st.slots.b ? 'Chờ đối thủ…' : 'Sân trống', count: 'Chuẩn bị', fight: 'ĐANG ĐẤU', end: 'Kết thúc' }[st.phase];
+  const fighting = ar.me && (st.phase === 'count' || st.phase === 'fight');
+  $('arLobby').classList.toggle('hidden', !!fighting);
+  for (const s of ['a', 'b']) {
+    const b = $(s === 'a' ? 'arJoinA' : 'arJoinB'), who = st.slots[s];
+    b.disabled = !!who || st.phase !== 'wait' || !!ar.me;
+    b.textContent = who ? `${s === 'a' ? '🔴' : '🔵'} ${who.name}${who.id === myId ? ' (bạn)' : ''}` : s === 'a' ? '🔴 Vào góc đỏ' : '🔵 Vào góc xanh';
+  }
+  $('arLeave').classList.toggle('hidden', !ar.me);
+  $('arChal').classList.toggle('hidden', st.phase !== 'wait');
+  $('arTouch').classList.toggle('hidden', !(IS_TOUCH && fighting));
+  $('arKeys').classList.toggle('hidden', !(fighting && !IS_TOUCH));
+}
+setInterval(() => {
+  if (!ar.open || !ar.st) return;
+  const left = Math.max(0, Math.ceil((ar.deadline - performance.now()) / 1000));
+  $('arTime').textContent = ar.st.phase === 'fight' ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : ar.st.phase === 'count' ? '' : '';
+  if (ar.st.phase === 'count') { const n = Math.ceil((ar.deadline - performance.now()) / 1000); const txt = n > 0 ? String(n) : ''; if ($('arBig').textContent !== txt && txt) arenaBig(txt, 900); }
+}, 150);
+function openArena(force) {
+  if (ar.open && !force) return closeArena();
+  ar.open = true; buildArena(); document.body.classList.add('arena-on'); $('arenaUI').classList.remove('hidden'); $('boxLbl').textContent = 'Về rạp';
+  if (ar.st) { for (const s of ['a', 'b']) arenaFighter(s); }
+  arenaUI();
+}
+function closeArena() {
+  if (ar.me && ar.st && (ar.st.phase === 'fight' || ar.st.phase === 'count') && !confirm('Rời sân lúc đang đấu sẽ bị xử thua. Rời sân?')) return;
+  if (ar.me) socket.emit('ba:leave');
+  ar.open = false; ar.keys = {}; ar.stick.x = ar.stick.z = 0; ar.btnBlk = false;
+  document.body.classList.remove('arena-on'); $('arenaUI').classList.add('hidden'); $('boxLbl').textContent = 'Boxing';
+}
+$('dBox').onclick = () => openArena();
+$('arBack').onclick = closeArena;
+$('arJoinA').onclick = () => socket.emit('ba:join', 'a', (r) => r && r.error && toast(r.error));
+$('arJoinB').onclick = () => socket.emit('ba:join', 'b', (r) => r && r.error && toast(r.error));
+$('arLeave').onclick = () => { if (ar.st && (ar.st.phase === 'fight' || ar.st.phase === 'count') && !confirm('Rời sàn lúc đang đấu sẽ bị xử thua?')) return; socket.emit('ba:leave'); };
+$('arChal').onclick = () => { openPeople(); toast('Chọn một người rồi bấm 🥊 Thách đấu'); };
+// bàn phím
+const AR_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyJ', 'KeyK', 'KeyL', 'ShiftLeft', 'ShiftRight', 'Space']);
+addEventListener('keydown', (e) => {
+  if (!ar.open || e.target.closest('input,textarea,select,[contenteditable]')) return;
+  if (e.code === 'Escape') return closeArena();
+  if (!AR_KEYS.has(e.code)) return;
+  e.preventDefault(); if (e.repeat) return;
+  ar.keys[e.code] = true;
+  if (e.code === 'KeyJ') arenaAct('jab'); else if (e.code === 'KeyK') arenaAct('hook'); else if (e.code === 'Space') arenaAct('dodge');
+});
+addEventListener('keyup', (e) => { if (ar.keys[e.code]) { ar.keys[e.code] = false; } });
+addEventListener('blur', () => { ar.keys = {}; });
+// cần gạt ảo + nút trên điện thoại
+{
+  const stick = $('arStick'), knob = stick.querySelector('i'); let pid = null;
+  const move = (e) => {
+    const r = stick.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2, R = r.width / 2;
+    let dx = e.clientX - cx, dy = e.clientY - cy; const l = Math.hypot(dx, dy); if (l > R) { dx = dx / l * R; dy = dy / l * R; }
+    knob.style.transform = `translate(${dx}px, ${dy}px)`; ar.stick.x = dx / R; ar.stick.z = dy / R;
+  };
+  stick.addEventListener('pointerdown', (e) => { pid = e.pointerId; try { stick.setPointerCapture(pid); } catch {} move(e); e.preventDefault(); });
+  stick.addEventListener('pointermove', (e) => { if (e.pointerId === pid) move(e); });
+  const end = (e) => { if (e.pointerId !== pid) return; pid = null; knob.style.transform = ''; ar.stick.x = ar.stick.z = 0; };
+  stick.addEventListener('pointerup', end); stick.addEventListener('pointercancel', end);
+  document.querySelectorAll('#arTouch [data-act]').forEach((b) => {
+    const k = b.dataset.act;
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.classList.add('on'); if (k === 'block') ar.btnBlk = true; else arenaAct(k); });
+    const up = () => { b.classList.remove('on'); if (k === 'block') ar.btnBlk = false; };
+    b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('pointerleave', up);
+  });
+}
+// lời mời thách đấu
+function closeInvite() { ar.inv = null; $('boxInvite').classList.add('hidden'); }
+$('bxAccept').onclick = () => { if (ar.inv) socket.emit('box:answer', { from: ar.inv.from, accept: true }); closeInvite(); };
+$('bxDecline').onclick = () => { if (ar.inv) socket.emit('box:answer', { from: ar.inv.from, accept: false }); closeInvite(); };
+function onBoxInvite(d) { if (!d) return; ar.inv = d; ar.invT = performance.now() + (d.ms || 15000); $('bxInvName').textContent = d.name; $('boxInvite').classList.remove('hidden'); sfx('bell', vol); }
+setInterval(() => { if (!ar.inv) return; const l = Math.max(0, Math.ceil((ar.invT - performance.now()) / 1000)); $('bxInvTime').textContent = l + 's'; if (!l) closeInvite(); }, 250);
 function boxChallengeBtn(u) {
   const b = $('pvBox'); if (!b) return;
-  const f = cur && cur.fight, busy = f && (f.a.id === u.id || f.b.id === u.id);
-  b.classList.toggle('hidden', RING_A < 0 || !u || u.id === myId);
-  b.disabled = !!f; b.textContent = busy ? '🥊 Đang thi đấu' : f ? '🥊 Võ đài đang bận' : '🥊 Thách đấu';
+  const st = ar.st, busy = st && st.phase !== 'wait';
+  b.classList.toggle('hidden', !u || u.id === myId);
+  b.disabled = !!busy; b.textContent = busy ? '🥊 Sân boxing đang có trận' : '🥊 Thách đấu boxing';
   b.onclick = () => socket.emit('box:challenge', u.id, (r) => toast(r && r.error ? r.error : `Đã gửi lời thách đấu tới ${u.name} — chờ trả lời…`));
 }
-
-

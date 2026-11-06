@@ -689,29 +689,40 @@
   @media (pointer: coarse) { .witem, .wslot, .dbtn, #bl button { touch-action: manipulation; } }
   /* ===== Võ đài boxing ===== */
   #pvBox { margin-top: 4px; }
-  #boxHud { position: fixed; top: 84px; left: 50%; transform: translateX(-50%); z-index: 28; width: min(560px, 94vw); padding: 10px 14px 8px; border-radius: 16px; }
-  body:not(.in-room) #boxHud, body:not(.in-room) #boxCtl, body:not(.in-room) #boxInvite { display: none !important; }
-  .bxRow { display: flex; align-items: center; gap: 10px; }
-  .bxSide { flex: 1; min-width: 0; } .bxSide small { font-size: 11px; color: #ffd36b; display: block; min-height: 14px; }
-  .bxSide.b { text-align: right; }
-  .bxTop { display: flex; justify-content: space-between; gap: 6px; font-size: 13px; } .bxTop b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bxSide.a b { color: #ff7b7b; } .bxSide.b b { color: #7ba4ff; } .bxTop span { font-weight: 800; }
-  .bxBar { height: 10px; border-radius: 6px; background: rgba(255,255,255,.12); overflow: hidden; margin-top: 3px; display: flex; }
-  .bxSide.b .bxBar { justify-content: flex-end; }
-  .bxBar i { display: block; height: 100%; transition: width .4s; } .bxSide.a .bxBar i { background: linear-gradient(90deg, #ff3b3b, #ff8a5c); } .bxSide.b .bxBar i { background: linear-gradient(270deg, #3a6cd8, #5ac8ff); }
-  .bxMid { text-align: center; font-size: 12px; min-width: 76px; } #bxTurn { font-weight: 800; } #bxTime { color: #ffd36b; font-weight: 800; font-size: 15px; }
-  #bxLast { margin-top: 6px; font-size: 12.5px; text-align: center; line-height: 1.45; } #bxLast .vs { color: var(--muted); margin: 0 4px; } #bxLast .crit { color: #ffd23f; font-weight: 800; }
-  .bxPipBtn { position: absolute; top: -12px; right: 10px; font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: rgba(20,14,22,.92); color: inherit; cursor: pointer; }
-  #boxCtl { position: fixed; left: 50%; transform: translateX(-50%); bottom: 70px; z-index: 31; width: min(520px, 94vw); padding: 10px 12px; border-radius: 18px; text-align: center; }
-  #bxCtlMsg { font-size: 13px; margin-bottom: 8px; }
-  .bxMoves { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .bxMoves button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border-radius: 14px; border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.06); color: inherit; font: inherit; font-weight: 700; font-size: 14px; cursor: pointer; }
-  .bxMoves button span { font-size: 28px; } .bxMoves button small { font-size: 10.5px; color: var(--muted); font-weight: 500; }
-  .bxMoves button:hover:not(:disabled) { background: rgba(255,255,255,.13); } .bxMoves button:disabled { opacity: .45; cursor: default; }
-  .bxMoves button.on { opacity: 1; background: linear-gradient(135deg, rgba(255,60,80,.45), rgba(155,48,255,.45)); border-color: transparent; }
+  /* ===== Sân boxing ===== */
+  body:not(.in-room) #arenaUI, body:not(.in-room) #boxInvite { display: none !important; }
+  body.arena-on #pill, body.arena-on #bl, body.arena-on #reclineBox, body.arena-on #djPanel, body.arena-on #djBadge, body.arena-on #tapPlay, body.arena-on #djFlash { display: none !important; }
+  #dBox.live .ic { animation: arPulse 1s infinite; } @keyframes arPulse { 50% { transform: scale(1.25); } }
+  #arenaUI { position: fixed; inset: 0; z-index: 12; pointer-events: none; }
+  #arenaUI > * { pointer-events: auto; }
+  .arBack { position: fixed; top: 12px; left: 12px; padding: 8px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,.15); color: inherit; font: inherit; font-weight: 700; cursor: pointer; z-index: 2; }
+  #arHud { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); width: min(620px, 70vw); padding: 10px 14px; border-radius: 16px; display: flex; align-items: center; gap: 12px; }
+  .arSide { flex: 1; min-width: 0; } .arSide.b { text-align: right; }
+  .arTop { display: flex; justify-content: space-between; gap: 6px; font-size: 14px; } .arTop b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .arTop span { font-weight: 900; }
+  .arSide.a b { color: #ff7b7b; } .arSide.b b { color: #7ba4ff; }
+  .arBar { height: 12px; border-radius: 7px; background: rgba(255,255,255,.12); overflow: hidden; margin-top: 4px; display: flex; } .arSide.b .arBar { justify-content: flex-end; }
+  .arBar i { display: block; height: 100%; width: 100%; transition: width .25s; } .arSide.a .arBar i { background: linear-gradient(90deg, #ff3b3b, #ff8a5c); } .arSide.b .arBar i { background: linear-gradient(270deg, #3a6cd8, #5ac8ff); }
+  .arMid { text-align: center; min-width: 84px; font-size: 12px; } #arPhase { font-weight: 800; } #arTime { font-size: 20px; font-weight: 900; color: #ffd36b; }
+  #arBig { position: fixed; top: 38%; left: 50%; transform: translate(-50%, -50%) scale(.6); font-size: clamp(42px, 9vw, 110px); font-weight: 900; color: #fff; text-shadow: 0 0 24px rgba(255,42,61,.8), 0 4px 0 #000; opacity: 0; transition: opacity .15s, transform .25s; pointer-events: none !important; white-space: nowrap; }
+  #arBig.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  #arLobby { position: fixed; left: 50%; bottom: 86px; transform: translateX(-50%); width: min(560px, 94vw); padding: 12px; border-radius: 18px; text-align: center; }
+  .arSlots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .arSlot { padding: 12px 8px; border-radius: 14px; font: inherit; font-weight: 800; font-size: 15px; color: #fff; cursor: pointer; border: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .arSlot.a { background: linear-gradient(135deg, #c62a3a, #ff5a5a); } .arSlot.b { background: linear-gradient(135deg, #2a4fc6, #5a8aff); } .arSlot:disabled { opacity: .55; cursor: default; }
+  .arRow { display: flex; gap: 8px; justify-content: center; margin-top: 8px; } .arRow button { padding: 8px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.07); color: inherit; font: inherit; cursor: pointer; }
+  .arHelp { margin-top: 8px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+  #arKeys { position: fixed; left: 50%; bottom: 86px; transform: translateX(-50%); padding: 6px 14px; border-radius: 999px; font-size: 12.5px; white-space: nowrap; }
+  #arTouch { position: fixed; inset: auto 0 0 0; height: 0; }
+  #arStick { position: fixed; left: 22px; bottom: calc(var(--dockH, 120px) + 24px); width: 130px; height: 130px; border-radius: 50%; background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.2); touch-action: none; }
+  #arStick i { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px; border-radius: 50%; background: rgba(255,255,255,.35); box-shadow: 0 0 16px rgba(255,255,255,.3); }
+  .arBtns { position: fixed; right: 16px; bottom: calc(var(--dockH, 120px) + 18px); display: grid; grid-template-columns: repeat(2, 72px); gap: 10px; }
+  .arBtns button { width: 72px; height: 72px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); background: rgba(20,14,22,.6); color: #fff; font-size: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .arBtns button span { font-size: 11px; font-weight: 700; } .arBtns button.on { background: rgba(255,60,80,.6); transform: scale(.94); }
+  .arBtns button[data-act="jab"] { background: rgba(200,40,60,.55); } .arBtns button[data-act="block"] { background: rgba(40,80,200,.5); }
+  @media (max-width: 760px) { body.arena-on #br { display: none !important; } #arHud { top: 56px; width: 94vw; } .arBack { top: 8px; left: 8px; padding: 6px 10px; } #arLobby { bottom: calc(var(--dockH, 120px) + 8px); } }
   #boxInvite { position: fixed; top: 84px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 12px 16px; border-radius: 16px; text-align: center; width: min(420px, 94vw); }
   .bxInvBtns { display: flex; gap: 8px; justify-content: center; margin-top: 10px; } .bxInvBtns button { padding: 8px 18px; border-radius: 10px; }
-  @media (max-width: 760px) { #boxHud, #boxInvite { top: 64px; } #boxCtl { bottom: calc(var(--dockH, 120px) + 8px); } .bxMoves button span { font-size: 22px; } }
+  @media (max-width: 760px) { #boxInvite { top: 64px; } }
   /* ===== Bàn DJ ===== */
   #djFlash { position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0; transition: opacity .25s; }
   #djFlash.strobe { background: #fff; animation: djStrobe .11s steps(2, jump-none) infinite; }
@@ -954,6 +965,7 @@
   <button class="dbtn hidden" data-panel="canteen" id="dCanteen"><span class="ic"><svg class="ico"><use href="#i-popcorn"/></svg></span>Căn tin</button>
   <button class="dbtn" data-panel="chat"><span class="ic"><svg class="ico"><use href="#i-chat"/></svg></span>Trò chuyện<i class="badge" id="cBadge"></i></button>
   <button class="dbtn" id="dParty" title="Vote bật đèn bar (cần 1/3 phòng)"><span class="ic"><svg class="ico"><use href="#i-sparkles"/></svg></span><span id="partyLbl">Đèn bar</span><i class="badge" id="pBadge"></i></button>
+  <button class="dbtn" id="dBox" title="Sân boxing: đấu với người khác"><span class="ic" style="font-size:18px;line-height:1">🥊</span><span id="boxLbl">Boxing</span></button>
   <button class="dbtn hidden" id="dDJ" title="Bàn DJ trên sân khấu"><span class="ic"><svg class="ico" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg></span><span id="djLbl">Bàn DJ</span></button>
   <button class="dbtn hidden" id="dLeave"><span class="ic"><svg class="ico"><use href="#i-leave"/></svg></span><span class="lbl">Rời ghế</span></button>
   <button class="dbtn hidden" id="dShare"><span class="ic"><svg class="ico"><use href="#i-monitor"/></svg></span><span id="shareBtnLbl">Chia sẻ MH</span></button>
@@ -1038,21 +1050,23 @@
 <script src="/socket.io/socket.io.js"></script>
 <script type="module" src="/app.js"></script>
 <!-- ===== Võ đài boxing ===== -->
-<div id="boxHud" class="glass hidden">
-  <div class="bxRow">
-    <div class="bxSide a"><div class="bxTop"><b id="bxNameA"></b><span id="bxHpA"></span></div><div class="bxBar"><i id="bxBarA"></i></div><small id="bxStrA"></small></div>
-    <div class="bxMid"><div id="bxTurn"></div><div id="bxTime"></div></div>
-    <div class="bxSide b"><div class="bxTop"><span id="bxHpB"></span><b id="bxNameB"></b></div><div class="bxBar"><i id="bxBarB"></i></div><small id="bxStrB"></small></div>
+<div id="arenaUI" class="hidden">
+  <button id="arBack" class="arBack glass" type="button">⬅ Về rạp</button>
+  <div id="arHud" class="glass">
+    <div class="arSide a"><div class="arTop"><b id="arNameA">Trống</b><span id="arHpA">100</span></div><div class="arBar"><i id="arBarA"></i></div></div>
+    <div class="arMid"><div id="arPhase">Sân trống</div><div id="arTime"></div></div>
+    <div class="arSide b"><div class="arTop"><span id="arHpB">100</span><b id="arNameB">Trống</b></div><div class="arBar"><i id="arBarB"></i></div></div>
   </div>
-  <div id="bxLast">👊 Đấm thẳng thắng 🪝 Móc · 🪝 Móc thắng 🛡️ Đỡ · 🛡️ Đỡ thắng 👊 Đấm thẳng</div>
-  <button id="bxPip" class="bxPipBtn" type="button">📺</button>
-</div>
-<div id="boxCtl" class="glass hidden">
-  <div id="bxCtlMsg">Chọn đòn!</div>
-  <div class="bxMoves">
-    <button data-mv="jab" type="button"><span>👊</span>Đấm thẳng<small>thắng Móc · 1</small></button>
-    <button data-mv="hook" type="button"><span>🪝</span>Móc<small>thắng Đỡ · 2</small></button>
-    <button data-mv="block" type="button"><span>🛡️</span>Đỡ<small>thắng Đấm thẳng · 3</small></button>
+  <div id="arBig"></div>
+  <div id="arLobby" class="glass">
+    <div class="arSlots"><button id="arJoinA" class="arSlot a" type="button">🔴 Vào góc đỏ</button><button id="arJoinB" class="arSlot b" type="button">🔵 Vào góc xanh</button></div>
+    <div class="arRow"><button id="arChal" type="button">🥊 Thách đấu người trong phòng</button><button id="arLeave" class="hidden" type="button">Rời sàn</button></div>
+    <div class="arHelp">Vào 1 góc — đủ 2 người là đánh. <b>WASD</b> di chuyển · <b>J</b> đấm thẳng · <b>K</b> móc · giữ <b>L</b>/<b>Shift</b> đỡ · <b>Space</b> lướt né. Điện thoại có nút trên màn hình.</div>
+  </div>
+  <div id="arKeys" class="glass hidden"><b>WASD</b> đi · <b>J</b> đấm · <b>K</b> móc · <b>L</b>/<b>Shift</b> đỡ · <b>Space</b> né</div>
+  <div id="arTouch" class="hidden">
+    <div id="arStick"><i></i></div>
+    <div class="arBtns"><button data-act="jab" type="button">👊<span>Đấm</span></button><button data-act="hook" type="button">💥<span>Móc</span></button><button data-act="block" type="button">🛡️<span>Đỡ</span></button><button data-act="dodge" type="button">💨<span>Né</span></button></div>
   </div>
 </div>
 <div id="boxInvite" class="glass hidden">

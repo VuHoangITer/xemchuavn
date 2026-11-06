@@ -94,8 +94,7 @@ function makeRoom(id, type, extra = {}) {
   return {
     tpl, nSeats: T.seats, nDance: T.dance, cap: T.cap,
     djIdx: T.dance ? T.seats + T.dance : -1,   // chỗ đứng sau bàn DJ (chỉ phòng có sân khấu), ngay sau các chỗ nhảy
-    ringA: T.dance ? T.seats + T.dance + 1 : -1, ringB: T.dance ? T.seats + T.dance + 2 : -1,   // 2 góc võ đài boxing
-    fight: null, boxInv: new Map(),
+    arena: newArena(), boxInv: new Map(),          // sân boxing riêng của phòng (xem public/app.js: SÂN BOXING)
     dj: null,                                   // { id, name, prev } người đang chơi DJ
     rate: 1,                                    // tốc độ phát chung (DJ chỉnh)
     djBeat: null,                               // { bpm, at }: nhịp bài đang phát, at = giây trong video có phách 1 (đèn / loa / tự động DJ dùng chung)
@@ -113,7 +112,7 @@ function makeRoom(id, type, extra = {}) {
     token: 0, // tăng mỗi lần đổi video
     votes: new Set(),
     users: new Map(), // socket.id -> { name, voice, seat }
-    seats: new Array(T.seats + T.dance + (T.dance ? 3 : 0)).fill(null),   // + bàn DJ + 2 góc võ đài // seat index -> socket.id (sau các ghế là chỗ nhảy, nếu có)
+    seats: new Array(T.seats + T.dance + (T.dance ? 1 : 0)).fill(null),   // + bàn DJ // seat index -> socket.id (sau các ghế là chỗ nhảy, nếu có)
     party: new Set(),               // ai đang vote bật đèn bar
     chat: [],
     emptyTimer: null,
@@ -126,9 +125,8 @@ rooms.set('main', makeRoom('main', 'public', { name: 'Rạp công cộng' }));
 // Đổi bố cục rạp công cộng (trang quản trị): dựng lại phòng, giữ video / hàng chờ / chat; mọi người tải lại trang để vào cảnh mới
 function setMainRoom(tpl, name) {
   const old = rooms.get('main');
-  if (old.fight) { clearTimeout(old.fight.timer); old.fight = null; }
   const nr = makeRoom('main', 'public', { name: name || old.name, tpl });
-  for (const k of ['queue', 'current', 'startedAt', 'paused', 'pausedAt', 'token', 'chat', 'rate']) nr[k] = old[k];
+  for (const k of ['queue', 'current', 'startedAt', 'paused', 'pausedAt', 'token', 'chat', 'rate', 'arena', 'boxInv']) nr[k] = old[k];
   if (old.tpl !== nr.tpl) {
     io.to('main').emit('server:reload', { what: 'layout', message: 'Quản trị viên vừa đổi bố cục rạp, đang tải lại…' });
     for (const sid of old.users.keys()) { const s = io.sockets.sockets.get(sid); if (s) { s.leave('main'); s.data.room = null; } }
@@ -207,7 +205,7 @@ function snapshot(room) {
     users: list,
     share: room.share ? { id: room.share.id, name: room.share.name } : null,   // ai đang chia sẻ màn hình (phòng riêng)
     rate: room.rate || 1,
-    fight: fightState(room),
+    arena: arenaState(room),
     dj: room.dj ? { id: room.dj.id, name: room.dj.name, auto: !!room.djAuto } : null,
     djBeat: room.djBeat,
   };
@@ -309,7 +307,7 @@ function leaveRoom(socket) {
   if (!room) return;
   const u = room.users.get(socket.id);
   if (room.dj && room.dj.id === socket.id) endDJ(room, false);
-  boxForfeit(room, socket.id, 'rời phòng');
+  arenaLeave(room, socket.id, 'rời phòng');
   room.boxInv.delete(socket.id);
   if (u && u.seat != null && room.seats[u.seat] === socket.id) room.seats[u.seat] = null;
   room.users.delete(socket.id);
@@ -381,94 +379,74 @@ function makeSeatForReal(room) {
   if (room.id === 'main' && room.botN && randomFreeSeat(room) == null) removeBot(room);
 }
 
-// ---------- Võ đài boxing ----------
-// Thách đấu → nhận lời → 2 người lên võ đài. Mỗi lượt 2 bên chọn đòn bí mật rồi lật cùng lúc (kiểu oẳn tù tì):
-//   Đấm thẳng thắng Móc · Móc thắng Đỡ · Đỡ thắng Đấm thẳng (đỡ rồi phản đòn). Trùng đòn: cả 2 cùng mất ít máu.
-// Thắng liên tiếp → combo mạnh dần; không chọn = đứng im chịu đòn. 100 máu, về 0 là KO; tối đa 15 lượt.
-const BOX_BEATS = { jab: 'hook', hook: 'block', block: 'jab' };
-const BOX_WIN = { jab: 10, hook: 18, block: 12 }, BOX_TIE = { jab: 5, hook: 9, block: 0 };
-const BOX_MAX_TURNS = 15, BOX_PICK_MS = 7000, BOX_SHOW_MS = 2600;
-function fightState(room) {
-  const f = room.fight; if (!f) return null;
-  const side = (x) => ({ id: x.id, name: x.name, hp: x.hp, streak: x.streak, picked: !!f.picks[x.id] });
-  return { a: side(f.a), b: side(f.b), turn: f.turn, max: BOX_MAX_TURNS, phase: f.phase, left: Math.max(0, f.deadline - Date.now()), last: f.last, winner: f.winner || null };
+// ---------- Sân boxing (đối kháng thời gian thực) ----------
+// Mỗi phòng có 1 sân: 2 góc đỏ (a) / xanh (b). Đủ 2 người → đếm ngược → đánh.
+// Máy võ sĩ tự di chuyển (WASD / cần gạt) và gửi vị trí 20 lần/giây; server chuyển cho cả phòng xem.
+// Ra đòn: server đợi hết thời gian vung tay rồi kiểm tra khoảng cách + đối thủ có đỡ / né không → trừ máu, đẩy lùi.
+// 100 máu, KO hoặc hết 90 giây (nhiều máu hơn thắng). Người thắng ở lại sàn chờ đối thủ mới.
+const AR = {
+  R: 3.6,                                                            // nửa cạnh sàn đấu (m)
+  jab: { dmg: 7, range: 1.65, wind: 110, cd: 380, kb: 0.45, blk: 0.15 },
+  hook: { dmg: 15, range: 1.55, wind: 360, cd: 950, kb: 1.1, blk: 0.3 },
+  DODGE_MS: 320, DODGE_CD: 1100, TIME: 90000, COUNT: 3500,
+};
+function newArena() {
+  return { slots: { a: null, b: null }, phase: 'wait', hp: { a: 100, b: 100 }, pos: { a: { x: -2, z: 0 }, b: { x: 2, z: 0 } },
+    blk: { a: false, b: false }, dodge: { a: 0, b: 0 }, cd: { a: 0, b: 0 }, dcd: { a: 0, b: 0 }, at: 0, timer: null, winner: null, reason: '' };
 }
-function boxMoveTo(room, id, seat) {                                // đưa người lên góc võ đài, nhớ ghế cũ
-  const u = room.users.get(id); if (!u) return null;
-  const prev = u.seat; if (prev != null && room.seats[prev] === id) room.seats[prev] = null;
-  u.seat = seat; u.food = []; room.seats[seat] = id; return prev;
+function arenaState(room) {
+  const A = room.arena, sl = (x) => (x ? { id: x.id, name: x.name } : null);
+  return { slots: { a: sl(A.slots.a), b: sl(A.slots.b) }, phase: A.phase, hp: A.hp, left: Math.max(0, A.at - Date.now()), winner: A.winner, reason: A.reason };
 }
-function boxBack(room, x) {                                         // xong trận: về ghế cũ (nếu còn trống) hoặc ghế trống bất kỳ
-  const u = room.users.get(x.id); if (!u) return;
-  const ring = u.seat === room.ringA || u.seat === room.ringB; if (!ring) return;
-  room.seats[u.seat] = null;
-  makeSeatForReal(room);
-  const back = x.prev != null && x.prev < room.nSeats && room.seats[x.prev] == null ? x.prev : randomFreeSeat(room);
-  u.seat = back; if (back != null) room.seats[back] = x.id;
+const arenaEmit = (room) => io.to(room.id).emit('ba:state', arenaState(room));
+const sideOf = (A, id) => (A.slots.a && A.slots.a.id === id ? 'a' : A.slots.b && A.slots.b.id === id ? 'b' : null);
+function arenaCount(room) {                                          // đủ 2 người → về vị trí → đếm ngược
+  const A = room.arena; clearTimeout(A.timer);
+  A.phase = 'count'; A.at = Date.now() + AR.COUNT; A.hp = { a: 100, b: 100 }; A.winner = null; A.reason = '';
+  A.pos = { a: { x: -2, z: 0 }, b: { x: 2, z: 0 } }; A.blk = { a: false, b: false }; A.dodge = { a: 0, b: 0 };
+  io.to(room.id).emit('ba:reset', { pos: A.pos });
+  arenaEmit(room);
+  sysMsg(room, `🥊 ${A.slots.a.name} đấu với ${A.slots.b.name} ở sân boxing!`);
+  A.timer = setTimeout(() => {
+    if (A.phase !== 'count') return;
+    A.phase = 'fight'; A.at = Date.now() + AR.TIME; arenaEmit(room);
+    A.timer = setTimeout(() => arenaEnd(room, A.hp.a === A.hp.b ? null : A.hp.a > A.hp.b ? 'a' : 'b', 'hết giờ'), AR.TIME);
+  }, AR.COUNT);
 }
-function startFight(room, aId, bId) {
-  const A = room.users.get(aId), B = room.users.get(bId); if (!A || !B) return;
-  if (room.dj && (room.dj.id === aId || room.dj.id === bId)) return;
-  const f = room.fight = { a: { id: aId, name: A.name, hp: 100, streak: 0 }, b: { id: bId, name: B.name, hp: 100, streak: 0 }, turn: 0, phase: 'intro', picks: {}, last: null, deadline: Date.now() + 6000 };
-  f.a.prev = boxMoveTo(room, aId, room.ringA); f.b.prev = boxMoveTo(room, bId, room.ringB);
-  sysMsg(room, `🥊 ${A.name} thách đấu ${B.name} — lên võ đài!`);
-  io.to(room.id).emit('box:start', { a: A.name, b: B.name });
-  broadcast(room);
-  f.timer = setTimeout(() => boxNextTurn(room), 6000);             // đợi 2 võ sĩ đi lên võ đài
+function arenaEnd(room, win, reason) {
+  const A = room.arena; if (A.phase !== 'fight' && A.phase !== 'count') return;
+  clearTimeout(A.timer);
+  A.phase = 'end'; A.winner = win; A.reason = reason; A.at = Date.now() + 5000;
+  const W = win && A.slots[win], L = win && A.slots[win === 'a' ? 'b' : 'a'];
+  io.to(room.id).emit('ba:end', { win, reason, winner: W ? W.name : null, loser: L ? L.name : null });
+  sysMsg(room, W ? `🏆 ${W.name} thắng ${L ? L.name : ''} ở sân boxing (${reason})!` : `🤝 Trận boxing hoà (${reason})`);
+  arenaEmit(room);
+  A.timer = setTimeout(() => {                                       // người thắng ở lại sàn, người thua xuống
+    if (win) A.slots[win === 'a' ? 'b' : 'a'] = null; else A.slots.a = A.slots.b = null;
+    A.phase = 'wait'; A.winner = null; A.reason = ''; A.hp = { a: 100, b: 100 };
+    arenaEmit(room);
+  }, 5000);
 }
-function boxNextTurn(room) {
-  const f = room.fight; if (!f || f.phase === 'end') return;
-  f.turn++; f.picks = {}; f.phase = 'pick'; f.deadline = Date.now() + BOX_PICK_MS;
-  broadcast(room);
-  clearTimeout(f.timer); f.timer = setTimeout(() => boxResolve(room), BOX_PICK_MS);
+function arenaLeave(room, id, why) {                                 // rời sàn: đang đánh thì thua
+  const A = room.arena, s = sideOf(A, id); if (!s) return;
+  if (A.phase === 'fight' || A.phase === 'count') { arenaEnd(room, s === 'a' ? 'b' : 'a', `${A.slots[s].name} bỏ cuộc${why ? ' · ' + why : ''}`); return; }
+  if (A.phase === 'end') return;
+  A.slots[s] = null; arenaEmit(room);
 }
-function boxResolve(room) {
-  const f = room.fight; if (!f || f.phase !== 'pick') return;
-  clearTimeout(f.timer);
-  const ma = f.picks[f.a.id] || null, mb = f.picks[f.b.id] || null;
-  let dA = 0, dB = 0, win = null, crit = false;                     // dA = máu A mất
-  const bonus = (x) => Math.min(1.75, 1 + 0.25 * x.streak);
-  if (ma && mb && ma === mb) { dA = dB = BOX_TIE[ma]; }
-  else if (ma && (!mb || BOX_BEATS[ma] === mb)) win = 'a';
-  else if (mb && (!ma || BOX_BEATS[mb] === ma)) win = 'b';
-  if (win) {
-    const W = f[win], L = f[win === 'a' ? 'b' : 'a'], mv = win === 'a' ? ma : mb;
-    W.streak++; L.streak = 0;
-    let dmg = BOX_WIN[mv] * bonus({ streak: W.streak - 1 });
-    if (Math.random() < 0.12) { dmg *= 1.5; crit = true; }         // đòn chí mạng
-    dmg = Math.round(dmg);
-    if (win === 'a') dB = dmg; else dA = dmg;
-  } else { f.a.streak = 0; f.b.streak = 0; }
-  f.a.hp = Math.max(0, f.a.hp - dA); f.b.hp = Math.max(0, f.b.hp - dB);
-  f.last = { turn: f.turn, a: ma, b: mb, dA, dB, win, crit };
-  f.phase = 'reveal'; f.deadline = Date.now() + BOX_SHOW_MS;
-  io.to(room.id).emit('box:reveal', { ...f.last, hpA: f.a.hp, hpB: f.b.hp, streakA: f.a.streak, streakB: f.b.streak });
-  broadcast(room);
-  if (f.a.hp <= 0 || f.b.hp <= 0) f.timer = setTimeout(() => boxEnd(room, f.a.hp <= 0 && f.b.hp <= 0 ? null : f.a.hp <= 0 ? 'b' : 'a', 'KO'), 1400);
-  else if (f.turn >= BOX_MAX_TURNS) f.timer = setTimeout(() => boxEnd(room, f.a.hp === f.b.hp ? null : f.a.hp > f.b.hp ? 'a' : 'b', 'hết giờ'), 1400);
-  else f.timer = setTimeout(() => boxNextTurn(room), BOX_SHOW_MS);
-}
-function boxEnd(room, win, reason) {
-  const f = room.fight; if (!f || f.phase === 'end') return;
-  clearTimeout(f.timer);
-  f.phase = 'end'; f.winner = win; f.deadline = Date.now() + 4500;
-  const W = win && f[win], L = win && f[win === 'a' ? 'b' : 'a'];
-  io.to(room.id).emit('box:end', { win, reason, winner: W ? W.name : null, loser: L ? L.name : null });
-  sysMsg(room, W ? `🏆 ${W.name} thắng ${L.name} (${reason})!` : `🤝 ${f.a.name} và ${f.b.name} hoà nhau (${reason})`);
-  broadcast(room);
-  f.timer = setTimeout(() => {                                      // ăn mừng xong → về chỗ
-    if (room.fight !== f) return;
-    boxBack(room, f.a); boxBack(room, f.b); room.fight = null; broadcast(room);
-  }, 4500);
-}
-// võ sĩ rời phòng / đi chỗ khác → thua bỏ cuộc
-function boxForfeit(room, id, why) {
-  const f = room.fight; if (!f || f.phase === 'end') return;
-  if (f.a.id !== id && f.b.id !== id) return;
-  boxEnd(room, f.a.id === id ? 'b' : 'a', `${f.a.id === id ? f.a.name : f.b.name} bỏ cuộc${why ? ' · ' + why : ''}`);
+function arenaTryStart(room) { const A = room.arena; if (A.phase === 'wait' && A.slots.a && A.slots.b) arenaCount(room); }
+function arenaHit(room, s, k) {
+  const A = room.arena; if (A.phase !== 'fight') return;
+  const d = s === 'a' ? 'b' : 'a', M = AR[k], P = A.pos[s], Q = A.pos[d], now = Date.now();
+  const dist = Math.hypot(P.x - Q.x, P.z - Q.z);
+  if (dist > M.range) return io.to(room.id).emit('ba:miss', { s, k });
+  if (A.dodge[d] > now) return io.to(room.id).emit('ba:miss', { s, k, dodged: true });
+  const blocked = !!A.blk[d], dmg = blocked ? Math.max(1, Math.round(M.dmg * M.blk)) : M.dmg;
+  A.hp[d] = Math.max(0, A.hp[d] - dmg);
+  io.to(room.id).emit('ba:hit', { s: d, by: s, k, dmg, blocked, hp: A.hp, kb: blocked ? M.kb * 0.3 : M.kb, fx: P.x, fz: P.z });
+  if (A.hp[d] <= 0) arenaEnd(room, s, 'KO');
 }
 
-// ---------- Bàn DJ ----------
+// ---------- Bàn DJ ----------// ---------- Bàn DJ ----------
 // Người có vai trò DJ (hoặc quản trị) lên bàn DJ trên sân khấu; điều khiển tốc độ / tua / phanh video chung + hiệu ứng âm thanh, ánh sáng cho cả rạp.
 const canDJ = (name) => auth.hasRole(name, 'dj') || auth.isAdmin(name);
 function endDJ(room, moveBack = true) {
@@ -588,7 +566,6 @@ io.on('connection', (socket) => {
     }
     if (room.seats[idx] != null) return socket.emit('toast', 'Ghế này có người ngồi rồi');
     if (room.dj && room.dj.id === socket.id) endDJ(room, false);   // DJ đi chỗ khác → đóng bàn DJ
-    if (room.fight && room.fight.phase !== 'end' && (room.fight.a.id === socket.id || room.fight.b.id === socket.id)) boxForfeit(room, socket.id, 'rời võ đài');
     if (me.seat != null && room.seats[me.seat] === socket.id) room.seats[me.seat] = null;
     me.seat = idx;
     me.food = [];                    // đổi chỗ thì món cũ không theo sang
@@ -602,7 +579,6 @@ io.on('connection', (socket) => {
     const me = room && room.users.get(socket.id);
     if (!me || me.seat == null) return;
     if (room.dj && room.dj.id === socket.id) return endDJ(room, false);
-    if (room.fight && (room.fight.a.id === socket.id || room.fight.b.id === socket.id)) return boxForfeit(room, socket.id, 'rời võ đài');
     if (room.seats[me.seat] === socket.id) room.seats[me.seat] = null;
     me.seat = null; me.food = [];
     scheduleBroadcast(room);
@@ -681,15 +657,49 @@ io.on('connection', (socket) => {
   });
 
   // Vote bật đèn bar (bấm lần nữa = rút vote)
-  // ----- Võ đài boxing -----
+  // ----- Sân boxing -----
+  socket.on('ba:join', (side, cb) => {
+    cb = typeof cb === 'function' ? cb : () => {};
+    const room = rooms.get(socket.data.room), me = room && room.users.get(socket.id); if (!me) return cb({ error: 'Chưa vào phòng' });
+    const A = room.arena;
+    if (side !== 'a' && side !== 'b') return cb({ error: 'Góc không hợp lệ' });
+    if (sideOf(A, socket.id)) return cb({ ok: true });
+    if (A.slots[side]) return cb({ error: `${A.slots[side].name} đang ở góc này` });
+    if (A.phase !== 'wait') return cb({ error: 'Đang có trận, đợi xong đã' });
+    A.slots[side] = { id: socket.id, name: me.name }; arenaEmit(room); cb({ ok: true });
+    arenaTryStart(room);
+  });
+  socket.on('ba:leave', () => { const room = rooms.get(socket.data.room); if (room) arenaLeave(room, socket.id, 'rời sàn'); });
+  socket.on('ba:st', (d) => {                                         // vị trí võ sĩ (máy võ sĩ tự tính) → chuyển cho cả phòng
+    const room = rooms.get(socket.data.room); if (!room || !d) return;
+    const A = room.arena, s = sideOf(A, socket.id); if (!s || (A.phase !== 'fight' && A.phase !== 'count')) return;
+    const x = Math.max(-AR.R, Math.min(AR.R, Number(d.x) || 0)), z = Math.max(-AR.R, Math.min(AR.R, Number(d.z) || 0));
+    A.pos[s] = { x, z }; A.blk[s] = !!d.b;
+    socket.volatile.to(room.id).emit('ba:st', { s, x, z, b: !!d.b, m: d.m ? 1 : 0 });
+  });
+  socket.on('ba:atk', (k) => {
+    const room = rooms.get(socket.data.room); if (!room || !AR[k] || !AR[k].dmg) return;
+    const A = room.arena, s = sideOf(A, socket.id), now = Date.now();
+    if (!s || A.phase !== 'fight' || now < A.cd[s]) return;
+    A.cd[s] = now + AR[k].cd;
+    socket.to(room.id).emit('ba:anim', { s, k });                     // người khác thấy vung tay ngay (máy mình đã tự diễn)
+    setTimeout(() => arenaHit(room, s, k), AR[k].wind);
+  });
+  socket.on('ba:dodge', () => {
+    const room = rooms.get(socket.data.room); if (!room) return;
+    const A = room.arena, s = sideOf(A, socket.id), now = Date.now();
+    if (!s || A.phase !== 'fight' || now < A.dcd[s]) return;
+    A.dcd[s] = now + AR.DODGE_CD; A.dodge[s] = now + AR.DODGE_MS;
+    socket.to(room.id).emit('ba:anim', { s, k: 'dodge' });
+  });
+  // thách đấu: nhận lời → cả 2 vào 2 góc sân, máy 2 người tự mở sân boxing
   socket.on('box:challenge', (targetId, cb) => {
     cb = typeof cb === 'function' ? cb : () => {};
     const room = rooms.get(socket.data.room), me = room && room.users.get(socket.id), tg = room && room.users.get(targetId);
     if (!me) return cb({ error: 'Chưa vào phòng' });
-    if (room.ringA < 0) return cb({ error: 'Phòng này không có võ đài (chỉ rạp lớn có)' });
     if (!tg || targetId === socket.id) return cb({ error: 'Không tìm thấy người này' });
-    if (room.fight) return cb({ error: 'Võ đài đang có trận, đợi xong đã' });
-    if (room.dj && (room.dj.id === socket.id || room.dj.id === targetId)) return cb({ error: 'Người đang chơi DJ không thách đấu được' });
+    const A = room.arena;
+    if (A.phase !== 'wait' || (A.slots.a && A.slots.a.id !== socket.id) || (A.slots.b && A.slots.b.id !== socket.id)) return cb({ error: 'Sân boxing đang có người, đợi trống đã' });
     const now = Date.now();
     if (now - (socket.data.boxT || 0) < 8000) return cb({ error: 'Đợi vài giây rồi thách đấu tiếp' });
     socket.data.boxT = now;
@@ -711,15 +721,11 @@ io.on('connection', (socket) => {
     const me = room.users.get(socket.id), ch = room.users.get(inv.from);
     if (!ch) return socket.emit('toast', 'Người thách đấu đã rời phòng');
     if (!d.accept) return io.to(inv.from).emit('toast', `${me.name} đã từ chối lời thách đấu`);
-    if (room.fight) { socket.emit('toast', 'Võ đài đang có trận khác'); return io.to(inv.from).emit('toast', 'Võ đài đang có trận khác'); }
-    startFight(room, inv.from, socket.id);
-  });
-  socket.on('box:pick', (mv) => {
-    const room = rooms.get(socket.data.room), f = room && room.fight;
-    if (!f || f.phase !== 'pick' || !BOX_BEATS[mv] || (f.a.id !== socket.id && f.b.id !== socket.id) || f.picks[socket.id]) return;
-    f.picks[socket.id] = mv;
-    if (f.picks[f.a.id] && f.picks[f.b.id]) { clearTimeout(f.timer); f.timer = setTimeout(() => boxResolve(room), 350); }
-    else broadcast(room);                                           // cho đối thủ thấy "đã chọn" (không lộ đòn)
+    const A = room.arena;
+    if (A.phase !== 'wait' || [A.slots.a, A.slots.b].some((x) => x && x.id !== inv.from && x.id !== socket.id)) { socket.emit('toast', 'Sân boxing đang có người khác'); return io.to(inv.from).emit('toast', 'Sân boxing đang có người khác'); }
+    A.slots = { a: { id: inv.from, name: ch.name }, b: { id: socket.id, name: me.name } };
+    io.to(inv.from).emit('ba:open'); socket.emit('ba:open');
+    arenaEmit(room); arenaTryStart(room);
   });
 
   // ----- Bàn DJ -----
@@ -731,7 +737,6 @@ io.on('connection', (socket) => {
     if (room.djIdx < 0) return cb({ error: 'Phòng này không có sân khấu để đặt bàn DJ' });
     if (room.dj && room.dj.id === socket.id) return cb({ ok: true });
     if (room.dj) return cb({ error: `DJ ${room.dj.name} đang chơi` });
-    if (room.fight && (room.fight.a.id === socket.id || room.fight.b.id === socket.id)) return cb({ error: 'Đang thi đấu trên võ đài' });
     const occ = room.seats[room.djIdx]; if (occ && occ !== socket.id) return cb({ error: 'Bàn DJ đang bận' });
     const prev = me.seat;
     if (prev != null && room.seats[prev] === socket.id) room.seats[prev] = null;
