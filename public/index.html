@@ -687,6 +687,31 @@
   }
   @media (max-width: 380px) { .dbtn { min-width: 56px; font-size: 10px; } #pill { font-size: 11px; } }
   @media (pointer: coarse) { .witem, .wslot, .dbtn, #bl button { touch-action: manipulation; } }
+  /* ===== Võ đài boxing ===== */
+  #pvBox { margin-top: 4px; }
+  #boxHud { position: fixed; top: 84px; left: 50%; transform: translateX(-50%); z-index: 28; width: min(560px, 94vw); padding: 10px 14px 8px; border-radius: 16px; }
+  body:not(.in-room) #boxHud, body:not(.in-room) #boxCtl, body:not(.in-room) #boxInvite { display: none !important; }
+  .bxRow { display: flex; align-items: center; gap: 10px; }
+  .bxSide { flex: 1; min-width: 0; } .bxSide small { font-size: 11px; color: #ffd36b; display: block; min-height: 14px; }
+  .bxSide.b { text-align: right; }
+  .bxTop { display: flex; justify-content: space-between; gap: 6px; font-size: 13px; } .bxTop b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bxSide.a b { color: #ff7b7b; } .bxSide.b b { color: #7ba4ff; } .bxTop span { font-weight: 800; }
+  .bxBar { height: 10px; border-radius: 6px; background: rgba(255,255,255,.12); overflow: hidden; margin-top: 3px; display: flex; }
+  .bxSide.b .bxBar { justify-content: flex-end; }
+  .bxBar i { display: block; height: 100%; transition: width .4s; } .bxSide.a .bxBar i { background: linear-gradient(90deg, #ff3b3b, #ff8a5c); } .bxSide.b .bxBar i { background: linear-gradient(270deg, #3a6cd8, #5ac8ff); }
+  .bxMid { text-align: center; font-size: 12px; min-width: 76px; } #bxTurn { font-weight: 800; } #bxTime { color: #ffd36b; font-weight: 800; font-size: 15px; }
+  #bxLast { margin-top: 6px; font-size: 12.5px; text-align: center; line-height: 1.45; } #bxLast .vs { color: var(--muted); margin: 0 4px; } #bxLast .crit { color: #ffd23f; font-weight: 800; }
+  .bxPipBtn { position: absolute; top: -12px; right: 10px; font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: rgba(20,14,22,.92); color: inherit; cursor: pointer; }
+  #boxCtl { position: fixed; left: 50%; transform: translateX(-50%); bottom: 70px; z-index: 31; width: min(520px, 94vw); padding: 10px 12px; border-radius: 18px; text-align: center; }
+  #bxCtlMsg { font-size: 13px; margin-bottom: 8px; }
+  .bxMoves { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .bxMoves button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border-radius: 14px; border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.06); color: inherit; font: inherit; font-weight: 700; font-size: 14px; cursor: pointer; }
+  .bxMoves button span { font-size: 28px; } .bxMoves button small { font-size: 10.5px; color: var(--muted); font-weight: 500; }
+  .bxMoves button:hover:not(:disabled) { background: rgba(255,255,255,.13); } .bxMoves button:disabled { opacity: .45; cursor: default; }
+  .bxMoves button.on { opacity: 1; background: linear-gradient(135deg, rgba(255,60,80,.45), rgba(155,48,255,.45)); border-color: transparent; }
+  #boxInvite { position: fixed; top: 84px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 12px 16px; border-radius: 16px; text-align: center; width: min(420px, 94vw); }
+  .bxInvBtns { display: flex; gap: 8px; justify-content: center; margin-top: 10px; } .bxInvBtns button { padding: 8px 18px; border-radius: 10px; }
+  @media (max-width: 760px) { #boxHud, #boxInvite { top: 64px; } #boxCtl { bottom: calc(var(--dockH, 120px) + 8px); } .bxMoves button span { font-size: 22px; } }
   /* ===== Bàn DJ ===== */
   #djFlash { position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0; transition: opacity .25s; }
   #djFlash.strobe { background: #fff; animation: djStrobe .11s steps(2, jump-none) infinite; }
@@ -882,6 +907,7 @@
       <div class="person-view" id="personView">
         <div class="pv-head"><div class="pv-av" id="pvAvatar"></div><div><b id="pvName"></b><small id="pvSeat"></small></div></div>
         <div id="personPreview"></div>
+        <button class="primary hidden" id="pvBox" type="button">🥊 Thách đấu</button>
         <p class="hint" style="margin:0;text-align:center">Kéo để xoay nhân vật</p>
       </div>
     </div>
@@ -1011,6 +1037,28 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script type="module" src="/app.js"></script>
+<!-- ===== Võ đài boxing ===== -->
+<div id="boxHud" class="glass hidden">
+  <div class="bxRow">
+    <div class="bxSide a"><div class="bxTop"><b id="bxNameA"></b><span id="bxHpA"></span></div><div class="bxBar"><i id="bxBarA"></i></div><small id="bxStrA"></small></div>
+    <div class="bxMid"><div id="bxTurn"></div><div id="bxTime"></div></div>
+    <div class="bxSide b"><div class="bxTop"><span id="bxHpB"></span><b id="bxNameB"></b></div><div class="bxBar"><i id="bxBarB"></i></div><small id="bxStrB"></small></div>
+  </div>
+  <div id="bxLast">👊 Đấm thẳng thắng 🪝 Móc · 🪝 Móc thắng 🛡️ Đỡ · 🛡️ Đỡ thắng 👊 Đấm thẳng</div>
+  <button id="bxPip" class="bxPipBtn" type="button">📺</button>
+</div>
+<div id="boxCtl" class="glass hidden">
+  <div id="bxCtlMsg">Chọn đòn!</div>
+  <div class="bxMoves">
+    <button data-mv="jab" type="button"><span>👊</span>Đấm thẳng<small>thắng Móc · 1</small></button>
+    <button data-mv="hook" type="button"><span>🪝</span>Móc<small>thắng Đỡ · 2</small></button>
+    <button data-mv="block" type="button"><span>🛡️</span>Đỡ<small>thắng Đấm thẳng · 3</small></button>
+  </div>
+</div>
+<div id="boxInvite" class="glass hidden">
+  <div>🥊 <b id="bxInvName"></b> thách đấu bạn trên võ đài! <span id="bxInvTime" class="muted"></span></div>
+  <div class="bxInvBtns"><button class="primary" id="bxAccept" type="button">Nhận lời</button><button id="bxDecline" type="button">Từ chối</button></div>
+</div>
 <!-- ===== Bàn DJ ===== -->
 <div id="djFlash"></div>
 <div id="djBadge" class="hidden"></div>

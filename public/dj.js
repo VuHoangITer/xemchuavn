@@ -56,6 +56,10 @@ const SOUNDS = {
     g.connect(master); src.start(t); src.stop(t + 0.65);
   },
   rewind(t) { for (let k = 0; k < 3; k++) osc('sawtooth', 1300, 160, t + k * 0.17, 0.17, 0.12); noise(t, 0.55, 'bandpass', 2500, 1.5, 0.15, 400); },
+  punch(t) { osc('sine', 140, 50, t, 0.18, 0.9); noise(t, 0.08, 'lowpass', 900, 0.8, 0.6); },              // đấm trúng: bịch
+  block(t) { noise(t, 0.06, 'bandpass', 1300, 2, 0.45); osc('triangle', 320, 240, t, 0.07, 0.2); },     // đỡ: cộp
+  whoosh(t) { noise(t, 0.16, 'bandpass', 700, 1.2, 0.18, 2600); },                                     // vung tay trượt
+  bell(t) { for (const [f, g] of [[1150, 0.3], [2310, 0.12], [3460, 0.06]]) osc('sine', f, f * 0.995, t, 1.6, g); for (const [f, g] of [[1150, 0.25], [2310, 0.1]]) osc('sine', f, f, t + 0.28, 1.4, g); },   // chuông võ đài
   boom(t) {                                                      // nổ trầm ngay lập tức (tự động DJ dùng đúng phách drop)
     osc('sine', 120, 30, t, 1.4, 1.0); osc('sawtooth', 60, 32, t, 0.9, 0.16); noise(t, 0.35, 'lowpass', 320, 0.7, 0.55); noise(t, 0.12, 'highpass', 5000, 0.7, 0.18);
   },
