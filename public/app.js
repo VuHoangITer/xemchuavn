@@ -3182,10 +3182,10 @@ function frame() {
   if (starPts) starPts.material.opacity = 0.65 + 0.35 * Math.sin(t * 1.7);
   for (const c of candles) { const k = 0.85 + 0.15 * Math.sin(t * 9 + c.ph) * Math.sin(t * 3.7 + c.ph * 2); c.f.scale.set(k, 1.8 * k, k); c.halo.material.opacity = 0.35 * k; if (c.l) c.l.intensity = 2.2 * k; }
   // luồng sáng nghiêng về phía cuối rạp (x âm → hướng +z), quét nhẹ, không bao giờ hắt lên màn chiếu
-  if (ar.scene && (ar.open || arLive())) arenaFrame(dt, t);         // sân boxing (đang mở, hoặc đang chiếu trận lên màn hình)
-  arenaPiP();
-  if (ar.open) glR.render(ar.scene, ar.cam);
-  else { glR.render(scene, camera); cssR.render(cssScene, camera); }
+  if (ar.scene && arLive()) arenaFrame(dt, t);                      // sân boxing: chạy khi có trận, chiếu kín màn chiếu
+  arenaScreen();
+  glR.render(scene, camera);
+  cssR.render(cssScene, camera);
   tryBootPlayer();
   requestAnimationFrame(frame);
 }
@@ -4763,7 +4763,6 @@ function connectSocket() {
   socket.on('ba:miss', arenaOnMiss);
   socket.on('ba:reset', arenaOnReset);
   socket.on('ba:end', arenaOnEnd);
-  socket.on('ba:open', () => openArena(true));
   socket.on('roles', (d) => { myRoles = (d && d.roles) || []; updateDJBtn(); if (myRoles.includes('dj')) toast('🎧 Bạn vừa được cấp vai trò DJ'); });
   socket.on('order', (o) => {                                  // ai đó gọi món → nhân viên bưng ra
     if (!o || !Array.isArray(o.items)) return;
@@ -5090,15 +5089,15 @@ setInterval(() => {
 }, 25);
 
 // =====================================================================
-//  SÂN BOXING — mục "Boxing" trong menu chuyển sang sân đấu riêng. Tam khắc kiểu Naraka:
+//  SÂN BOXING — thách đấu trong danh sách người xem; khi có trận, màn chiếu của rạp chiếu trận boxing toàn màn. Tam khắc kiểu Naraka:
 //  đòn TRẮNG (J: đấm thẳng) thắng ĐỎ · ĐỎ (L: phản đòn) thắng XANH · XANH (giữ K: đấm tụ lực, có giáp) thắng TRẮNG.
 //  Né (Space) né được mọi đòn nhưng tốn thể lực. Trận đang đánh được chiếu lên màn hình rạp.
 // =====================================================================
 const AR_R = 6.0, AR_TOP = 1.0, AR_ARM = 1.25;                     // nửa cạnh sàn, độ cao mặt sàn, tay dài hơn bình thường
 const AR_CD = { white: 450, red: 1400 }, AR_CHG = { min: 1000, max: 1500 };
-const AR_STAM = { max: 100, cost: 34, regen: 25, delay: 700 };
+const AR_STAM = { max: 100, cost: 65, regen: 14, delay: 900 };   // né 1 lần rồi chờ ~3s
 const AR_COL = { white: 0xffffff, blue: 0x3fa0ff, red: 0xff2a3d };
-const ar = { open: false, scene: null, cam: null, st: null, f: { a: null, b: null }, me: null, keys: {}, stick: { x: 0, z: 0 },
+const ar = { hideScreen: false, prevCam: null, scene: null, cam: null, st: null, f: { a: null, b: null }, me: null, keys: {}, stick: { x: 0, z: 0 },
   kb: { x: 0, z: 0 }, dodgeV: null, sendT: 0, cd: { white: 0, red: 0 }, pops: [], crowd: null, cheer: 0, pipN: 0, inv: null, invT: 0,
   camT: new THREE.Vector3(), stam: AR_STAM.max, stamT: 0, chg: 0, glowTex: null };
 const arLive = () => !!(ar.st && (ar.st.phase === 'fight' || ar.st.phase === 'count' || ar.st.phase === 'end'));
@@ -5109,7 +5108,7 @@ function arStam() { const since = arNow() - ar.stamT - AR_STAM.delay; return sin
 function buildArena() {
   if (ar.scene) return;
   const S = ar.scene = new THREE.Scene(); S.background = new THREE.Color(0x07070c); S.fog = new THREE.Fog(0x07070c, 30, 70);
-  ar.cam = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 160); ar.cam.position.set(0, 9, 14); ar.cam.lookAt(0, 1.5, 0);
+  ar.cam = new THREE.PerspectiveCamera(45, 16 / 9, 0.1, 160); ar.cam.position.set(0, 9, 14); ar.cam.lookAt(0, 1.5, 0);
   S.add(new THREE.HemisphereLight(0xc8ccff, 0x15121c, 0.8));
   const key = new THREE.SpotLight(0xfff2dd, 1600, 44, 0.62, 0.45, 1.3); key.position.set(0, 20, 4); key.target.position.set(0, 0, 0); S.add(key, key.target);
   for (const [x, c] of [[-13, 0xff3050], [13, 0x4070ff]]) { const l = new THREE.PointLight(c, 260, 36, 1.6); l.position.set(x, 7, -5); S.add(l); }
@@ -5164,6 +5163,7 @@ function buildArena() {
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     const m = new THREE.Mesh(new THREE.PlaneGeometry(22, 5.5), new THREE.MeshBasicMaterial({ map: t })); m.position.set(0, 9.5, -(R + 12)); S.add(m);
   }
+  ar.lights = { a: new THREE.PointLight(0x3fa0ff, 0, 6, 1.2), b: new THREE.PointLight(0x3fa0ff, 0, 6, 1.2) }; S.add(ar.lights.a, ar.lights.b);
   ar.glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'); const g = x.createRadialGradient(64, 64, 0, 64, 64, 64); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.4, 'rgba(255,255,255,.45)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); })();
 }
 
@@ -5171,9 +5171,9 @@ function buildArena() {
 const AR_ADD = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending };
 function arenaFighter(side) {
   const sl = ar.st && ar.st.slots[side], f = ar.f[side];
-  if (!sl) { if (f) { ar.scene.remove(f.av.g, f.ring, f.glow); ar.f[side] = null; } return null; }
+  if (!sl) { if (f) { ar.scene.remove(f.av.g, f.ring, f.glow); f.light.intensity = 0; ar.f[side] = null; } return null; }
   if (f && f.id === sl.id) return f;
-  if (f) ar.scene.remove(f.av.g, f.ring, f.glow);
+  if (f) { ar.scene.remove(f.av.g, f.ring, f.glow); f.light.intensity = 0; }
   const u = (cur && cur.users.find((x) => x.id === sl.id)) || { id: sl.id, name: sl.name, look: null };
   const av = createAvatar({ ...u }, false); setSitting(av, false); av.seat = null;
   av.armL.scale.y = av.armR.scale.y = AR_ARM;                                   // tay dài hơn
@@ -5183,7 +5183,8 @@ function arenaFighter(side) {
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.85, 40), new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0, side: THREE.DoubleSide, ...AR_ADD }));
   ring.rotation.x = -Math.PI / 2; ar.scene.add(ring);
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: ar.glowTex, color: 0xffffff, opacity: 0, ...AR_ADD })); glow.scale.set(3.4, 4.2, 1); ar.scene.add(glow);
-  return (ar.f[side] = { id: sl.id, side, av, ring, glow, x: x0, z: 0, tx: x0, tz: 0, mv: false, anim: null, ko: false, win: false,
+  const light = ar.lights[side];                                                   // đèn màu riêng (tạo sẵn để không phải dựng lại shader)
+  return (ar.f[side] = { id: sl.id, side, av, ring, glow, light, x: x0, z: 0, tx: x0, tz: 0, mv: false, anim: null, ko: false, win: false,
     charging: 0, redUntil: 0, flash: 0, flashCol: 0xffffff, stunUntil: 0 });
 }
 const L3 = THREE.MathUtils.lerp;
@@ -5220,7 +5221,10 @@ function arenaPose(f, t) {
   else if (f.flash > now) { col = f.flashCol; op = (f.flash - now) / 300; }
   f.ring.position.set(f.x, AR_TOP + 0.03, f.z); f.glow.position.set(f.x, AR_TOP + 1.7, f.z);
   if (col != null) { f.ring.material.color.setHex(col); f.glow.material.color.setHex(col); }
-  f.ring.material.opacity = Math.max(0, op); f.glow.material.opacity = Math.max(0, op * 0.7);
+  f.ring.material.opacity = Math.max(0, op); f.glow.material.opacity = Math.max(0, op * (f.charging ? 1 : 0.7));
+  f.glow.scale.set(f.charging ? 4.2 : 3.4, f.charging ? 5 : 4.2, 1);
+  f.light.position.set(f.x, AR_TOP + 1.8, f.z + 0.6); if (col != null) f.light.color.setHex(col);
+  f.light.intensity = Math.max(0, op) * (f.charging ? 70 : 45);                     // cả người sáng màu đòn (gồng = xanh rõ)
 }
 function arenaAnim(side, k) {
   const f = ar.f[side]; if (!f) return; const now = arNow();
@@ -5245,7 +5249,7 @@ function arenaControl(dt) {
   const f = ar.me && ar.f[ar.me]; if (!f || !ar.st) return;
   const live = ar.st.phase === 'fight', K = ar.keys, now = arNow();
   let ix = 0, iz = 0;
-  if (ar.open && live && !f.ko) {
+  if (live && !f.ko) {
     ix = (K.KeyD || K.ArrowRight ? 1 : 0) - (K.KeyA || K.ArrowLeft ? 1 : 0) + ar.stick.x;
     iz = (K.KeyS || K.ArrowDown ? 1 : 0) - (K.KeyW || K.ArrowUp ? 1 : 0) + ar.stick.z;
   }
@@ -5262,7 +5266,7 @@ function arenaControl(dt) {
   if ((live || ar.st.phase === 'count') && now - ar.sendT > 50) { ar.sendT = now; socket.emit('ba:st', { x: +f.x.toFixed(3), z: +f.z.toFixed(3), m: f.mv ? 1 : 0 }); }
   arenaMeters();
 }
-function arCanAct() { const f = ar.me && ar.f[ar.me]; return ar.open && f && !f.ko && ar.st && ar.st.phase === 'fight' && !arStunned(); }
+function arCanAct() { const f = ar.me && ar.f[ar.me]; return !!f && !f.ko && ar.st && ar.st.phase === 'fight' && !arStunned(); }
 function arWhite() {
   const f = ar.f[ar.me]; if (!arCanAct() || f.charging) return;
   const now = arNow(); if (now < ar.cd.white) return; ar.cd.white = now + AR_CD.white;
@@ -5294,7 +5298,7 @@ function arDodge() {
   f.charging = 0; socket.emit('ba:dodge'); arenaAnim(ar.me, 'dodge'); sfx('whoosh', vol);
 }
 function arenaMeters() {                                             // thanh thể lực + thanh gồng (của mình)
-  if (!ar.open || !ar.me) return;
+  if (!ar.me) return;
   const f = ar.f[ar.me], st = arStam();
   $('arStamBar').style.width = (st / AR_STAM.max * 100) + '%'; $('arStam').classList.toggle('low', st < AR_STAM.cost);
   const c = f && f.charging ? Math.min(1, (arNow() - f.charging) / AR_CHG.max) : 0;
@@ -5328,44 +5332,41 @@ function arenaFrame(dt, t) {
     });
     C.body.instanceMatrix.needsUpdate = true; C.head.instanceMatrix.needsUpdate = true;
   }
-  if (ar.open) {                                                       // camera bám theo 2 võ sĩ, lùi xa khi 2 người cách xa
+  {                                                                    // camera bám theo 2 võ sĩ, lùi xa khi 2 người cách xa
     const mx = A && B ? (A.x + B.x) / 2 : A ? A.x : B ? B.x : 0, mz = A && B ? (A.z + B.z) / 2 : A ? A.z : B ? B.z : 0;
-    const d = A && B ? Math.hypot(A.x - B.x, A.z - B.z) : 3, far = IS_TOUCH && innerWidth < innerHeight ? 1.45 : 1;
+    const d = A && B ? Math.hypot(A.x - B.x, A.z - B.z) : 3, far = 1;
     ar.camT.set(mx * 0.65, (6 + d * 0.42) * far, (9 + d * 0.62) * far + mz * 0.55);
     ar.cam.position.lerp(ar.camT, Math.min(1, dt * 3));
     ar.cam.lookAt(mx * 0.65, AR_TOP + 1.0, mz * 0.6);
-    const asp = innerWidth / innerHeight; if (Math.abs(ar.cam.aspect - asp) > 0.001) { ar.cam.aspect = asp; ar.cam.updateProjectionMatrix(); }
   }
 }
 
-// ---- trận đang đánh: chiếu lên góc trên phải màn chiếu trong rạp
-const arPip = { group: new THREE.Group(), rt: null, cam: null, hud: null, tex: null };
+// ---- trận đang đánh: chiếu kín màn chiếu của rạp (phủ lên phim; người xem có thể bấm "Xem phim" để tắt cho riêng mình)
+const arPip = { group: new THREE.Group(), rt: null, hud: null, tex: null };
 {
-  arPip.rt = new THREE.WebGLRenderTarget(640, 360, { samples: 2 });
-  arPip.cam = new THREE.PerspectiveCamera(46, 16 / 9, 0.1, 160); arPip.cam.position.set(0, 11, 17); arPip.cam.lookAt(0, 1.2, 0);
-  const W = SCR_W * 0.42, H = W * 9 / 16, HH = W * 0.14;
-  arPip.group.position.set(SCR_W / 2 - W / 2 - 0.5, SCR_Y + SCR_H / 2 - (H + HH) / 2 - 0.5, SCR_Z + 0.06); arPip.group.visible = false; scene.add(arPip.group);
-  const fr = new THREE.Mesh(new THREE.PlaneGeometry(W + 0.24, H + HH + 0.24), new THREE.MeshBasicMaterial({ color: 0xff2a3d })); fr.position.z = -0.01; arPip.group.add(fr);
-  const img = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ map: arPip.rt.texture })); img.position.y = -HH / 2; arPip.group.add(img);
-  const c = document.createElement('canvas'); c.width = 1024; c.height = Math.round(1024 * HH / W); arPip.hud = c.getContext('2d');
+  arPip.rt = new THREE.WebGLRenderTarget(1280, 720, { samples: 4 });
+  const HH = SCR_H * 0.085;
+  arPip.group.position.set(0, SCR_Y, SCR_Z + 0.03); arPip.group.visible = false; scene.add(arPip.group);
+  const img = new THREE.Mesh(new THREE.PlaneGeometry(SCR_W, SCR_H), new THREE.MeshBasicMaterial({ map: arPip.rt.texture })); arPip.group.add(img);
+  const c = document.createElement('canvas'); c.width = 1600; c.height = Math.round(1600 * HH / SCR_W); arPip.hud = c.getContext('2d');
   arPip.tex = new THREE.CanvasTexture(c); arPip.tex.colorSpace = THREE.SRGBColorSpace;
-  const hud = new THREE.Mesh(new THREE.PlaneGeometry(W, HH), new THREE.MeshBasicMaterial({ map: arPip.tex })); hud.position.y = H / 2; arPip.group.add(hud);
+  const hud = new THREE.Mesh(new THREE.PlaneGeometry(SCR_W, HH), new THREE.MeshBasicMaterial({ map: arPip.tex, transparent: true })); hud.position.set(0, SCR_H / 2 - HH / 2, 0.01); arPip.group.add(hud);
 }
 function drawArPipHud() {
   const x = arPip.hud, st = ar.st; if (!x || !st) return; const w = x.canvas.width, h = x.canvas.height;
-  x.fillStyle = '#0b0b12'; x.fillRect(0, 0, w, h);
-  const bar = (x0, hp, col, right) => { const bw = w * 0.36; x.fillStyle = '#2a2a33'; x.fillRect(x0, h * 0.6, bw, h * 0.22); x.fillStyle = col; const fw = bw * hp / 100; x.fillRect(right ? x0 + bw - fw : x0, h * 0.6, fw, h * 0.22); };
-  x.font = `800 ${Math.round(h * 0.34)}px system-ui, sans-serif`; x.textBaseline = 'middle';
-  x.fillStyle = '#ff6b6b'; x.textAlign = 'left'; x.fillText(`${st.slots.a ? st.slots.a.name : '—'}  ${st.hp.a}`, w * 0.03, h * 0.3); bar(w * 0.03, st.hp.a, '#e84545', false);
-  x.fillStyle = '#6b9bff'; x.textAlign = 'right'; x.fillText(`${st.hp.b}  ${st.slots.b ? st.slots.b.name : '—'}`, w * 0.97, h * 0.3); bar(w * 0.61, st.hp.b, '#3a6cd8', true);
-  x.fillStyle = '#ffd36b'; x.textAlign = 'center'; x.fillText('🥊 LIVE', w / 2, h * 0.5);
+  x.clearRect(0, 0, w, h); x.fillStyle = 'rgba(8,8,14,.72)'; x.fillRect(0, 0, w, h);
+  const bar = (x0, hp, col, right) => { const bw = w * 0.36; x.fillStyle = '#2a2a33'; x.fillRect(x0, h * 0.62, bw, h * 0.2); x.fillStyle = col; const fw = bw * hp / 100; x.fillRect(right ? x0 + bw - fw : x0, h * 0.62, fw, h * 0.2); };
+  x.font = `800 ${Math.round(h * 0.36)}px system-ui, sans-serif`; x.textBaseline = 'middle';
+  x.fillStyle = '#ff6b6b'; x.textAlign = 'left'; x.fillText(`${st.slots.a ? st.slots.a.name : '—'}  ${st.hp.a}`, w * 0.03, h * 0.32); bar(w * 0.03, st.hp.a, '#e84545', false);
+  x.fillStyle = '#6b9bff'; x.textAlign = 'right'; x.fillText(`${st.hp.b}  ${st.slots.b ? st.slots.b.name : '—'}`, w * 0.97, h * 0.32); bar(w * 0.61, st.hp.b, '#3a6cd8', true);
+  x.fillStyle = '#ffd36b'; x.textAlign = 'center'; x.fillText('🥊 XCVN BOXING · LIVE', w / 2, h * 0.5);
   arPip.tex.needsUpdate = true;
 }
-function arenaPiP() {
-  const show = !ar.open && ar.scene && arLive();
-  arPip.group.visible = !!show; if (!show) return;
-  if ((ar.pipN = (ar.pipN + 1) % 3) !== 0) return;
-  glR.setRenderTarget(arPip.rt); glR.render(ar.scene, arPip.cam); glR.setRenderTarget(null);
+function arenaScreen() {
+  const show = !!ar.scene && arLive() && (!ar.hideScreen || !!ar.me);
+  arPip.group.visible = show; if (!show) return;
+  if ((ar.pipN = (ar.pipN + 1) % 2) !== 0) return;                      // ~30 hình / giây
+  glR.setRenderTarget(arPip.rt); glR.render(ar.scene, ar.cam); glR.setRenderTarget(null);
 }
 
 // ---- sự kiện từ server
@@ -5373,7 +5374,11 @@ function arenaOnState(st) {
   if (!st) return;
   const prev = ar.st; ar.st = st;
   ar.me = st.slots.a && st.slots.a.id === myId ? 'a' : st.slots.b && st.slots.b.id === myId ? 'b' : null;
-  if (ar.open || arLive()) buildArena();
+  if (arLive()) buildArena();
+  const fighting = !!ar.me && (st.phase === 'count' || st.phase === 'fight');
+  if (fighting && ar.prevCam == null) { ar.prevCam = camMode; if (camMode !== 'screen') setCamMode('screen'); }
+  if (!ar.me && ar.prevCam != null && st.phase === 'wait') { const pc = ar.prevCam; ar.prevCam = null; if (pc !== 'screen') setCamMode(pc); }
+  if (st.phase === 'count' && (!prev || prev.phase !== 'count')) ar.hideScreen = false;
   if (ar.scene) {
     for (const s of ['a', 'b']) { const f = arenaFighter(s); if (f && (st.phase === 'wait' || st.phase === 'count')) { f.ko = f.win = false; f.charging = 0; f.stunUntil = 0; if (st.phase === 'count') f.anim = null; } }
     drawArPipHud();
@@ -5420,7 +5425,7 @@ function arenaOnParry(d) {                                            // đỏ k
   arKnock(d.by, d.fx, d.fz, 0.9);
   drawArPipHud(); arenaUI();
 }
-function arenaOnMiss(d) { if (d && d.dodged) { arenaPop(d.s === 'a' ? 'b' : 'a', 'NÉ!', '#7deabf'); sfx('whoosh', vol); } }
+function arenaOnMiss(d) { if (!d) return; if (d.dodged) { arenaPop(d.s === 'a' ? 'b' : 'a', 'NÉ!', '#7deabf'); sfx('whoosh', vol); } else arenaPop(d.s, 'TRƯỢT', '#b8b8c8'); }
 function arenaOnStam(d) { if (!d || d.s !== ar.me) return; ar.stam = d.v; ar.stamT = arNow(); if (d.fail) arenaPop(ar.me, 'HẾT THỂ LỰC', '#ffb020'); }
 function arenaOnEnd(d) {
   if (!d) return;
@@ -5435,55 +5440,34 @@ function arenaOnEnd(d) {
 function arenaBig(text, ms) { const el = $('arBig'); el.textContent = text; el.classList.add('show'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), ms); }
 function arenaUI() {
   const st = ar.st; if (!st) return;
-  $('dBox').classList.toggle('live', arLive());
-  if (!ar.open) return;
-  const nm = (s) => (st.slots[s] ? st.slots[s].name : 'Trống');
+  const live = arLive(), fighting = !!ar.me && (st.phase === 'count' || st.phase === 'fight');
+  $('arenaUI').classList.toggle('hidden', !live);
+  document.body.classList.toggle('box-fight', fighting);
+  if (!live) return;
+  const nm = (s) => (st.slots[s] ? st.slots[s].name : '—');
   $('arNameA').textContent = nm('a'); $('arNameB').textContent = nm('b');
   $('arHpA').textContent = st.hp.a; $('arHpB').textContent = st.hp.b; $('arBarA').style.width = st.hp.a + '%'; $('arBarB').style.width = st.hp.b + '%';
-  $('arPhase').textContent = { wait: st.slots.a || st.slots.b ? 'Chờ đối thủ…' : 'Sân trống', count: 'Chuẩn bị', fight: 'ĐANG ĐẤU', end: 'Kết thúc' }[st.phase];
-  const fighting = ar.me && (st.phase === 'count' || st.phase === 'fight');
-  $('arLobby').classList.toggle('hidden', !!fighting);
-  $('arLobby').classList.toggle('compact', st.phase !== 'wait');          // đang có trận: người xem chỉ thấy 2 tên, không che sân
-  for (const s of ['a', 'b']) {
-    const b = $(s === 'a' ? 'arJoinA' : 'arJoinB'), who = st.slots[s];
-    b.disabled = !!who || st.phase !== 'wait' || !!ar.me;
-    b.textContent = who ? `${s === 'a' ? '🔴' : '🔵'} ${who.name}${who.id === myId ? ' (bạn)' : ''}` : s === 'a' ? '🔴 Vào góc đỏ' : '🔵 Vào góc xanh';
-  }
-  $('arLeave').classList.toggle('hidden', !ar.me);
-  $('arChal').classList.toggle('hidden', st.phase !== 'wait');
+  $('arPhase').textContent = { wait: '', count: 'Chuẩn bị', fight: 'ĐANG ĐẤU', end: 'Kết thúc' }[st.phase];
+  $('arScreenBtn').classList.toggle('hidden', !!ar.me);
+  $('arScreenBtn').textContent = ar.hideScreen ? '🥊 Xem boxing trên màn chiếu' : '🎬 Xem phim (ẩn boxing)';
+  $('arQuit').classList.toggle('hidden', !fighting);
   $('arTouch').classList.toggle('hidden', !(IS_TOUCH && fighting));
   $('arKeys').classList.toggle('hidden', !(fighting && !IS_TOUCH));
   $('arMeters').classList.toggle('hidden', !fighting);
 }
 setInterval(() => {
-  if (!ar.open || !ar.st) return;
+  if (!ar.st || !arLive()) return;
   const left = Math.max(0, Math.ceil((ar.deadline - arNow()) / 1000));
   $('arTime').textContent = ar.st.phase === 'fight' ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : '';
   if (ar.st.phase === 'count') { const n = Math.ceil((ar.deadline - arNow()) / 1000); const txt = n > 0 ? String(n) : ''; if ($('arBig').textContent !== txt && txt) arenaBig(txt, 900); }
 }, 150);
-function openArena(force) {
-  if (ar.open && !force) return closeArena();
-  ar.open = true; buildArena(); document.body.classList.add('arena-on'); $('arenaUI').classList.remove('hidden'); $('boxLbl').textContent = 'Về rạp';
-  if (ar.st) { for (const s of ['a', 'b']) arenaFighter(s); }
-  arenaUI();
-}
-function closeArena() {
-  if (ar.me && ar.st && (ar.st.phase === 'fight' || ar.st.phase === 'count') && !confirm('Rời sân lúc đang đấu sẽ bị xử thua. Rời sân?')) return;
-  if (ar.me) socket.emit('ba:leave');
-  ar.open = false; ar.keys = {}; ar.stick.x = ar.stick.z = 0; arChargeEnd();
-  document.body.classList.remove('arena-on'); $('arenaUI').classList.add('hidden'); $('boxLbl').textContent = 'Boxing';
-}
-$('dBox').onclick = () => openArena();
-$('arBack').onclick = closeArena;
-$('arJoinA').onclick = () => socket.emit('ba:join', 'a', (r) => r && r.error && toast(r.error));
-$('arJoinB').onclick = () => socket.emit('ba:join', 'b', (r) => r && r.error && toast(r.error));
-$('arLeave').onclick = () => { if (ar.st && (ar.st.phase === 'fight' || ar.st.phase === 'count') && !confirm('Rời sàn lúc đang đấu sẽ bị xử thua?')) return; socket.emit('ba:leave'); };
-$('arChal').onclick = () => { openPeople(); toast('Chọn một người rồi bấm 🥊 Thách đấu'); };
+$('arScreenBtn').onclick = () => { ar.hideScreen = !ar.hideScreen; arenaUI(); };
+$('arQuit').onclick = () => { if (confirm('Bỏ cuộc? Bạn sẽ bị xử thua.')) socket.emit('ba:leave'); };
 // bàn phím: WASD đi · J trắng · giữ K tụ lực (xanh) · L đỏ · Space né
 const AR_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyJ', 'KeyK', 'KeyL', 'Space']);
 addEventListener('keydown', (e) => {
-  if (!ar.open || (e.target && e.target.closest && e.target.closest('input,textarea,select,[contenteditable]'))) return;
-  if (e.code === 'Escape') return closeArena();
+  if (!ar.me || !ar.st || (ar.st.phase !== 'fight' && ar.st.phase !== 'count')) return;   // chỉ khi mình đang thi đấu
+  if (e.target && e.target.closest && e.target.closest('input,textarea,select,[contenteditable]')) return;
   if (!AR_KEYS.has(e.code)) return;
   e.preventDefault(); if (e.repeat) return;
   ar.keys[e.code] = true;
@@ -5514,12 +5498,13 @@ addEventListener('blur', () => { ar.keys = {}; arChargeEnd(); });
 function closeInvite() { ar.inv = null; $('boxInvite').classList.add('hidden'); }
 $('bxAccept').onclick = () => { if (ar.inv) socket.emit('box:answer', { from: ar.inv.from, accept: true }); closeInvite(); };
 $('bxDecline').onclick = () => { if (ar.inv) socket.emit('box:answer', { from: ar.inv.from, accept: false }); closeInvite(); };
-function onBoxInvite(d) { if (!d) return; ar.inv = d; ar.invT = arNow() + (d.ms || 15000); $('bxInvName').textContent = d.name; $('boxInvite').classList.remove('hidden'); sfx('bell', vol); }
+function onBoxInvite(d) { if (!d) return; ar.inv = d; ar.invT = arNow() + (d.ms || 15000); $('bxInvName').textContent = d.name; $('bxInvMsg').textContent = d.all ? ' thách đấu cả phòng — ai nhận trước sẽ lên sàn!' : ' thách đấu bạn trên võ đài!'; $('boxInvite').classList.remove('hidden'); sfx('bell', vol); }
 setInterval(() => { if (!ar.inv) return; const l = Math.max(0, Math.ceil((ar.invT - arNow()) / 1000)); $('bxInvTime').textContent = l + 's'; if (!l) closeInvite(); }, 250);
-function boxChallengeBtn(u) {
-  const b = $('pvBox'); if (!b) return;
-  const st = ar.st, busy = st && st.phase !== 'wait';
-  b.classList.toggle('hidden', !u || u.id === myId);
-  b.disabled = !!busy; b.textContent = busy ? '🥊 Sân boxing đang có trận' : '🥊 Thách đấu boxing';
-  b.onclick = () => socket.emit('box:challenge', u.id, (r) => toast(r && r.error ? r.error : `Đã gửi lời thách đấu tới ${u.name} — chờ trả lời…`));
+
+function boxChallengeBtn(u) {                                         // nút trong bảng người xem: mình = thách đấu cả phòng, người khác = thách đấu 1-1
+  const b = $('pvBox'); if (!b || !u) return;
+  const st = ar.st, busy = st && (st.phase !== 'wait' || st.slots.a || st.slots.b), mine = u.id === myId;
+  b.classList.remove('hidden'); b.disabled = !!busy;
+  b.textContent = busy ? '🥊 Sân boxing đang có trận' : mine ? '🥊 Thách đấu tất cả' : '🥊 Thách đấu boxing';
+  b.onclick = () => socket.emit('box:challenge', mine ? '*' : u.id, (r) => toast(r && r.error ? r.error : mine ? `Đã thách đấu cả phòng (${r.n} người) — ai nhận trước sẽ lên sàn` : `Đã gửi lời thách đấu tới ${u.name} — chờ trả lời…`));
 }

@@ -691,12 +691,10 @@
   #pvBox { margin-top: 4px; }
   /* ===== Sân boxing ===== */
   body:not(.in-room) #arenaUI, body:not(.in-room) #boxInvite { display: none !important; }
-  body.arena-on #pill, body.arena-on #bl, body.arena-on #reclineBox, body.arena-on #djPanel, body.arena-on #djBadge, body.arena-on #tapPlay, body.arena-on #djFlash { display: none !important; }
-  #dBox.live .ic { animation: arPulse 1s infinite; } @keyframes arPulse { 50% { transform: scale(1.25); } }
+  body.box-fight #reclineBox, body.box-fight #djPanel, body.box-fight #tapPlay { display: none !important; }   /* đang thi đấu: gọn màn hình */
   #arenaUI { position: fixed; inset: 0; z-index: 12; pointer-events: none; }
   #arenaUI > * { pointer-events: auto; }
-  .arBack { position: fixed; top: 12px; left: 12px; padding: 8px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,.15); color: inherit; font: inherit; font-weight: 700; cursor: pointer; z-index: 2; }
-  #arHud { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); width: min(620px, 70vw); padding: 10px 14px; border-radius: 16px; display: flex; align-items: center; gap: 12px; }
+  #arHud { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); width: min(620px, 70vw); padding: 10px 14px; border-radius: 16px; display: flex; align-items: center; gap: 12px; }
   .arSide { flex: 1; min-width: 0; } .arSide.b { text-align: right; }
   .arTop { display: flex; justify-content: space-between; gap: 6px; font-size: 14px; } .arTop b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .arTop span { font-weight: 900; }
   .arSide.a b { color: #ff7b7b; } .arSide.b b { color: #7ba4ff; }
@@ -705,12 +703,10 @@
   .arMid { text-align: center; min-width: 84px; font-size: 12px; } #arPhase { font-weight: 800; } #arTime { font-size: 20px; font-weight: 900; color: #ffd36b; }
   #arBig { position: fixed; top: 38%; left: 50%; transform: translate(-50%, -50%) scale(.6); font-size: clamp(42px, 9vw, 110px); font-weight: 900; color: #fff; text-shadow: 0 0 24px rgba(255,42,61,.8), 0 4px 0 #000; opacity: 0; transition: opacity .15s, transform .25s; pointer-events: none !important; white-space: nowrap; }
   #arBig.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  #arLobby { position: fixed; left: 50%; bottom: 86px; transform: translateX(-50%); width: min(560px, 94vw); padding: 12px; border-radius: 18px; text-align: center; }
   .arSlots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .arSlot { padding: 12px 8px; border-radius: 14px; font: inherit; font-weight: 800; font-size: 15px; color: #fff; cursor: pointer; border: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .arSlot.a { background: linear-gradient(135deg, #c62a3a, #ff5a5a); } .arSlot.b { background: linear-gradient(135deg, #2a4fc6, #5a8aff); } .arSlot:disabled { opacity: .55; cursor: default; }
   .arRow { display: flex; gap: 8px; justify-content: center; margin-top: 8px; } .arRow button { padding: 8px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.07); color: inherit; font: inherit; cursor: pointer; }
-  #arLobby.compact { padding: 6px; width: min(420px, 90vw); } #arLobby.compact .arHelp, #arLobby.compact .arRow { display: none; } #arLobby.compact .arSlot { padding: 6px; font-size: 13px; }
   .arHelp { margin-top: 8px; font-size: 12px; color: var(--muted); line-height: 1.5; }
   #arKeys { position: fixed; left: 50%; bottom: 86px; transform: translateX(-50%); padding: 6px 14px; border-radius: 999px; font-size: 12.5px; white-space: nowrap; }
   #arTouch { position: fixed; inset: auto 0 0 0; height: 0; }
@@ -728,7 +724,8 @@
   #arStam i { background: linear-gradient(90deg, #3ad29f, #9dffcf); } #arStam.low i { background: linear-gradient(90deg, #ff9f43, #ffb020); }
   #arChg i { background: linear-gradient(90deg, #ddd, #fff); } #arChg.blue i { background: linear-gradient(90deg, #2a7fff, #7fd0ff); box-shadow: 0 0 12px #3fa0ff; }
   @media (max-width: 760px) { #arMeters { bottom: calc(var(--dockH, 120px) + 190px); } }
-  @media (max-width: 760px) { body.arena-on #br { display: none !important; } #arHud { top: 56px; width: 94vw; } .arBack { top: 8px; left: 8px; padding: 6px 10px; } #arLobby { bottom: calc(var(--dockH, 120px) + 8px); } }
+  .arTools { position: fixed; top: 132px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; } .arTools button { padding: 5px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.15); color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+  @media (max-width: 760px) { body.box-fight #br, body.box-fight #bl { display: none !important; } #arHud { top: 56px; width: 94vw; } .arTools { top: 118px; } }
   #boxInvite { position: fixed; top: 84px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 12px 16px; border-radius: 16px; text-align: center; width: min(420px, 94vw); }
   .bxInvBtns { display: flex; gap: 8px; justify-content: center; margin-top: 10px; } .bxInvBtns button { padding: 8px 18px; border-radius: 10px; }
   @media (max-width: 760px) { #boxInvite { top: 64px; } }
@@ -974,7 +971,6 @@
   <button class="dbtn hidden" data-panel="canteen" id="dCanteen"><span class="ic"><svg class="ico"><use href="#i-popcorn"/></svg></span>Căn tin</button>
   <button class="dbtn" data-panel="chat"><span class="ic"><svg class="ico"><use href="#i-chat"/></svg></span>Trò chuyện<i class="badge" id="cBadge"></i></button>
   <button class="dbtn" id="dParty" title="Vote bật đèn bar (cần 1/3 phòng)"><span class="ic"><svg class="ico"><use href="#i-sparkles"/></svg></span><span id="partyLbl">Đèn bar</span><i class="badge" id="pBadge"></i></button>
-  <button class="dbtn" id="dBox" title="Sân boxing: đấu với người khác"><span class="ic" style="font-size:18px;line-height:1">🥊</span><span id="boxLbl">Boxing</span></button>
   <button class="dbtn hidden" id="dDJ" title="Bàn DJ trên sân khấu"><span class="ic"><svg class="ico" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg></span><span id="djLbl">Bàn DJ</span></button>
   <button class="dbtn hidden" id="dLeave"><span class="ic"><svg class="ico"><use href="#i-leave"/></svg></span><span class="lbl">Rời ghế</span></button>
   <button class="dbtn hidden" id="dShare"><span class="ic"><svg class="ico"><use href="#i-monitor"/></svg></span><span id="shareBtnLbl">Chia sẻ MH</span></button>
@@ -1060,19 +1056,13 @@
 <script type="module" src="/app.js"></script>
 <!-- ===== Võ đài boxing ===== -->
 <div id="arenaUI" class="hidden">
-  <button id="arBack" class="arBack glass" type="button">⬅ Về rạp</button>
   <div id="arHud" class="glass">
     <div class="arSide a"><div class="arTop"><b id="arNameA">Trống</b><span id="arHpA">100</span></div><div class="arBar"><i id="arBarA"></i></div></div>
     <div class="arMid"><div id="arPhase">Sân trống</div><div id="arTime"></div></div>
     <div class="arSide b"><div class="arTop"><span id="arHpB">100</span><b id="arNameB">Trống</b></div><div class="arBar"><i id="arBarB"></i></div></div>
   </div>
   <div id="arBig"></div>
-  <div id="arLobby" class="glass">
-    <div class="arSlots"><button id="arJoinA" class="arSlot a" type="button">🔴 Vào góc đỏ</button><button id="arJoinB" class="arSlot b" type="button">🔵 Vào góc xanh</button></div>
-    <div class="arRow"><button id="arChal" type="button">🥊 Thách đấu người trong phòng</button><button id="arLeave" class="hidden" type="button">Rời sàn</button></div>
-    <div class="arHelp">Vào 1 góc — đủ 2 người là đánh. <b>WASD</b> di chuyển · <b>J</b> <span class="cw">đấm thẳng (trắng)</span> · giữ <b>K</b> <span class="cb">tụ lực (xanh)</span> · <b>L</b> <span class="cr">phản đòn (đỏ)</span> · <b>Space</b> né (tốn thể lực)<br>
-      <span class="cw">Trắng</span> thắng <span class="cr">Đỏ</span> · <span class="cr">Đỏ</span> thắng <span class="cb">Xanh</span> · <span class="cb">Xanh</span> thắng <span class="cw">Trắng</span> · gồng xanh 1–1,5s (nhả trước 1s thành trắng, đủ 1,5s tự nhả)</div>
-  </div>
+  <div class="arTools"><button id="arScreenBtn" class="glass" type="button">🎬 Xem phim (ẩn boxing)</button><button id="arQuit" class="glass hidden" type="button">🏳️ Bỏ cuộc</button></div>
   <div id="arKeys" class="glass hidden"><b>WASD</b> đi · <b>J</b> <span class="cw">trắng</span> · giữ <b>K</b> <span class="cb">xanh</span> · <b>L</b> <span class="cr">đỏ</span> · <b>Space</b> né</div>
   <div id="arMeters" class="hidden">
     <div id="arChg" class="hidden"><i id="arChgBar"></i><span>GỒNG</span></div>
@@ -1084,7 +1074,7 @@
   </div>
 </div>
 <div id="boxInvite" class="glass hidden">
-  <div>🥊 <b id="bxInvName"></b> thách đấu bạn trên võ đài! <span id="bxInvTime" class="muted"></span></div>
+  <div>🥊 <b id="bxInvName"></b><span id="bxInvMsg"> thách đấu bạn trên võ đài!</span> <span id="bxInvTime" class="muted"></span></div>
   <div class="bxInvBtns"><button class="primary" id="bxAccept" type="button">Nhận lời</button><button id="bxDecline" type="button">Từ chối</button></div>
 </div>
 <!-- ===== Bàn DJ ===== -->

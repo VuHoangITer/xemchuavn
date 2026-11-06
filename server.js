@@ -97,7 +97,7 @@ function makeRoom(id, type, extra = {}) {
   return {
     tpl, nSeats: T.seats, nDance: T.dance, cap: T.cap,
     djIdx: T.dance ? T.seats + T.dance : -1,   // chỗ đứng sau bàn DJ (chỉ phòng có sân khấu), ngay sau các chỗ nhảy
-    arena: newArena(), boxInv: new Map(),          // sân boxing riêng của phòng (xem public/app.js: SÂN BOXING)
+    arena: newArena(), boxInv: new Map(), boxAll: null,          // sân boxing riêng của phòng (xem public/app.js: SÂN BOXING)
     dj: null,                                   // { id, name, prev } người đang chơi DJ
     rate: 1,                                    // tốc độ phát chung (DJ chỉnh)
     djBeat: null,                               // { bpm, at }: nhịp bài đang phát, at = giây trong video có phách 1 (đèn / loa / tự động DJ dùng chung)
@@ -391,17 +391,18 @@ function makeSeatForReal(room) {
 // Máy võ sĩ tự di chuyển, gửi vị trí 20 lần/giây. Server quyết định trúng / trượt. 100 máu, KO hoặc hết 90 giây.
 const AR = {
   R: 6.0,                                                            // nửa cạnh sàn đấu (m)
-  white: { dmg: 8, range: 2.05, wind: 130, cd: 450, kb: 0.55 },
-  blue: { min: 1000, max: 1500, dmgLo: 16, dmgHi: 24, range: 2.3, wind: 160, cd: 700, kb: 1.6, stun: 900 },
+  white: { dmg: 8, range: 2.35, wind: 130, cd: 450, kb: 0.55 },
+  blue: { min: 1000, max: 1500, dmgLo: 16, dmgHi: 24, range: 2.55, wind: 160, cd: 700, kb: 1.6, stun: 900 },
   red: { win: 600, cd: 1400, stun: 1300, dmg: 6 },
-  DODGE_MS: 380, DODGE_COST: 34, STAM_MAX: 100, STAM_REGEN: 25, STAM_DELAY: 700,
+  DODGE_MS: 380, DODGE_COST: 65, STAM_MAX: 100, STAM_REGEN: 14, STAM_DELAY: 900,   // né 1 lần rồi chờ ~3s mới né tiếp được
+  LAG_MS: 250,                                                       // bù độ trễ mạng khi xét trúng đòn
   TIME: 90000, COUNT: 3500,
 };
 const SIDES = ['a', 'b'];
 function per(v) { return { a: v, b: v }; }       // khai báo hàm (dùng được trước dòng này: newArena chạy lúc tạo rạp công cộng)
 function newArena() {
   return { slots: { a: null, b: null }, phase: 'wait', hp: per(100), pos: { a: { x: -3, z: 0 }, b: { x: 3, z: 0 } },
-    charge: per(0), red: per(0), dodge: per(0), stun: per(0), cd: per(0), rcd: per(0), stam: per(100), stamT: per(0), ctimer: per(null),
+    charge: per(0), red: per(0), dodge: per(0), stun: per(0), cd: per(0), rcd: per(0), stam: per(100), stamT: per(0), ctimer: per(null), hist: { a: [], b: [] },
     at: 0, timer: null, winner: null, reason: '' };
 }
 function arenaState(room) {
@@ -416,7 +417,7 @@ function stamNow(A, s, now) {                                        // thể l�
   return since > 0 ? Math.min(AR.STAM_MAX, A.stam[s] + since / 1000 * AR.STAM_REGEN) : A.stam[s];
 }
 function arenaReset(A) {
-  A.hp = per(100); A.pos = { a: { x: -3, z: 0 }, b: { x: 3, z: 0 } };
+  A.hp = per(100); A.pos = { a: { x: -3, z: 0 }, b: { x: 3, z: 0 } }; A.hist = { a: [], b: [] };
   for (const s of SIDES) { clearTimeout(A.ctimer[s]); A.ctimer[s] = null; }
   A.charge = per(0); A.red = per(0); A.dodge = per(0); A.stun = per(0); A.cd = per(0); A.rcd = per(0); A.stam = per(AR.STAM_MAX); A.stamT = per(0);
 }
@@ -440,8 +441,8 @@ function arenaEnd(room, win, reason) {
   io.to(room.id).emit('ba:end', { win, reason, winner: W ? W.name : null, loser: L ? L.name : null });
   sysMsg(room, W ? `🏆 ${W.name} thắng ${L ? L.name : ''} ở sân boxing (${reason})!` : `🤝 Trận boxing hoà (${reason})`);
   arenaEmit(room);
-  A.timer = setTimeout(() => {                                       // người thắng ở lại sàn, người thua xuống
-    if (win) A.slots[other(win)] = null; else A.slots.a = A.slots.b = null;
+  A.timer = setTimeout(() => {                                       // xong trận: sân trống, ai cũng thách đấu được
+    A.slots.a = A.slots.b = null;
     A.phase = 'wait'; A.winner = null; A.reason = ''; A.hp = per(100);
     arenaEmit(room);
   }, 5000);
@@ -451,6 +452,13 @@ function arenaLeave(room, id, why) {                                 // rời s�
   if (A.phase === 'fight' || A.phase === 'count') { arenaEnd(room, other(s), `${A.slots[s].name} bỏ cuộc${why ? ' · ' + why : ''}`); return; }
   if (A.phase === 'end') return;
   A.slots[s] = null; arenaEmit(room);
+}
+// khoảng cách gần nhất giữa 2 võ sĩ trong ~0.25s vừa qua (bù độ trễ: trên màn hình thấy trúng thì tính trúng)
+function arenaDist(A, s, d, now) {
+  const P = A.pos[s]; let best = Math.hypot(P.x - A.pos[d].x, P.z - A.pos[d].z);
+  for (const h of A.hist[d]) if (now - h.t <= AR.LAG_MS) best = Math.min(best, Math.hypot(P.x - h.x, P.z - h.z));
+  for (const h of A.hist[s]) if (now - h.t <= AR.LAG_MS) best = Math.min(best, Math.hypot(h.x - A.pos[d].x, h.z - A.pos[d].z));
+  return best;
 }
 function arenaTryStart(room) { const A = room.arena; if (A.phase === 'wait' && A.slots.a && A.slots.b) arenaCount(room); }
 function arenaDamage(room, d, dmg) { const A = room.arena; A.hp[d] = Math.max(0, A.hp[d] - dmg); return A.hp[d] <= 0; }
@@ -463,7 +471,7 @@ function arenaWhite(room, s) {
   const A = room.arena; if (A.phase !== 'fight') return;
   const d = other(s), now = Date.now(), M = AR.white, P = A.pos[s], Q = A.pos[d];
   if (A.stun[s] > now) return;                                       // bị choáng trong lúc vung → huỷ
-  if (Math.hypot(P.x - Q.x, P.z - Q.z) > M.range) return io.to(room.id).emit('ba:miss', { s, k: 'white' });
+  if (arenaDist(A, s, d, now) > M.range) return io.to(room.id).emit('ba:miss', { s, k: 'white' });
   if (A.dodge[d] > now) return io.to(room.id).emit('ba:miss', { s, k: 'white', dodged: true });
   let dmg = M.dmg, kind = 'normal', kb = M.kb, stun = 0;
   if (A.red[d] > now) { dmg = Math.round(M.dmg * 1.5); kind = 'breakred'; kb = M.kb * 1.4; stun = 450; A.red[d] = 0; }   // trắng phá đỏ
@@ -478,7 +486,7 @@ function arenaBlue(room, s, power) {
   const A = room.arena; if (A.phase !== 'fight') return;
   const d = other(s), now = Date.now(), M = AR.blue, P = A.pos[s], Q = A.pos[d];
   if (A.stun[s] > now) return;
-  if (Math.hypot(P.x - Q.x, P.z - Q.z) > M.range) return io.to(room.id).emit('ba:miss', { s, k: 'blue' });
+  if (arenaDist(A, s, d, now) > M.range) return io.to(room.id).emit('ba:miss', { s, k: 'blue' });
   if (A.dodge[d] > now) return io.to(room.id).emit('ba:miss', { s, k: 'blue', dodged: true });
   if (A.red[d] > now) {                                              // đỏ khắc xanh: phản đòn
     A.red[d] = 0; arenaStun(room, s, AR.red.stun);
@@ -721,23 +729,13 @@ io.on('connection', (socket) => {
 
   // Vote bật đèn bar (bấm lần nữa = rút vote)
   // ----- Sân boxing -----
-  socket.on('ba:join', (side, cb) => {
-    cb = typeof cb === 'function' ? cb : () => {};
-    const room = rooms.get(socket.data.room), me = room && room.users.get(socket.id); if (!me) return cb({ error: 'Chưa vào phòng' });
-    const A = room.arena;
-    if (side !== 'a' && side !== 'b') return cb({ error: 'Góc không hợp lệ' });
-    if (sideOf(A, socket.id)) return cb({ ok: true });
-    if (A.slots[side]) return cb({ error: `${A.slots[side].name} đang ở góc này` });
-    if (A.phase !== 'wait') return cb({ error: 'Đang có trận, đợi xong đã' });
-    A.slots[side] = { id: socket.id, name: me.name }; arenaEmit(room); cb({ ok: true });
-    arenaTryStart(room);
-  });
   socket.on('ba:leave', () => { const room = rooms.get(socket.data.room); if (room) arenaLeave(room, socket.id, 'rời sàn'); });
   socket.on('ba:st', (d) => {                                         // vị trí võ sĩ (máy võ sĩ tự tính) → chuyển cho cả phòng
     const room = rooms.get(socket.data.room); if (!room || !d) return;
     const A = room.arena, s = sideOf(A, socket.id); if (!s || (A.phase !== 'fight' && A.phase !== 'count')) return;
     const x = Math.max(-AR.R, Math.min(AR.R, Number(d.x) || 0)), z = Math.max(-AR.R, Math.min(AR.R, Number(d.z) || 0));
     A.pos[s] = { x, z };
+    const H = A.hist[s], tn = Date.now(); H.push({ x, z, t: tn }); while (H.length && tn - H[0].t > 400) H.shift();
     socket.volatile.to(room.id).emit('ba:st', { s, x, z, m: d.m ? 1 : 0 });
   });
   socket.on('ba:atk', () => {                                          // đòn trắng
@@ -780,21 +778,34 @@ io.on('connection', (socket) => {
     socket.to(room.id).emit('ba:anim', { s, k: 'dodge' });
     socket.emit('ba:stam', { s, v: Math.floor(A.stam[s]) });
   });
-  // thách đấu: nhận lời → cả 2 vào 2 góc sân, máy 2 người tự mở sân boxing
+  // thách đấu 1 người hoặc cả phòng (ai nhận trước được đấu). Chỉ 1 sân: đấu xong mới thách đấu tiếp được.
+  const arenaFree = (A) => A.phase === 'wait' && !A.slots.a && !A.slots.b;
+  function boxStart(room, aId, bId) {
+    const A = room.arena, ua = room.users.get(aId), ub = room.users.get(bId); if (!ua || !ub || !arenaFree(A)) return false;
+    A.slots = { a: { id: aId, name: ua.name }, b: { id: bId, name: ub.name } };
+    if (room.boxAll) { clearTimeout(room.boxAll.timer); room.boxAll = null; }
+    for (const [tid, inv] of room.boxInv) { clearTimeout(inv.timer); io.to(tid).emit('box:inviteGone'); }
+    room.boxInv.clear(); io.to(room.id).emit('box:inviteGone');
+    arenaEmit(room); arenaTryStart(room); return true;
+  }
   socket.on('box:challenge', (targetId, cb) => {
     cb = typeof cb === 'function' ? cb : () => {};
-    const room = rooms.get(socket.data.room), me = room && room.users.get(socket.id), tg = room && room.users.get(targetId);
-    if (!me) return cb({ error: 'Chưa vào phòng' });
-    if (!tg || targetId === socket.id) return cb({ error: 'Không tìm thấy người này' });
-    const A = room.arena;
-    if (A.phase !== 'wait' || (A.slots.a && A.slots.a.id !== socket.id) || (A.slots.b && A.slots.b.id !== socket.id)) return cb({ error: 'Sân boxing đang có người, đợi trống đã' });
+    const room = rooms.get(socket.data.room), me = room && room.users.get(socket.id); if (!me) return cb({ error: 'Chưa vào phòng' });
+    if (!arenaFree(room.arena) || room.boxAll) return cb({ error: 'Sân boxing đang có trận / lời thách đấu khác, đợi xong đã' });
     const now = Date.now();
-    if (now - (socket.data.boxT || 0) < 8000) return cb({ error: 'Đợi vài giây rồi thách đấu tiếp' });
+    if (now - (socket.data.boxT || 0) < 6000) return cb({ error: 'Đợi vài giây rồi thách đấu tiếp' });
     socket.data.boxT = now;
-    if (tg.bot) {                                                   // khán giả ảo: từ chối sau vài giây như người thật
-      setTimeout(() => socket.emit('toast', `${tg.name} đã từ chối lời thách đấu`), 2500 + Math.random() * 4000);
-      return cb({ ok: true });
+    if (targetId === '*') {                                              // thách đấu cả phòng
+      const real = [...room.users.entries()].filter(([id, u]) => id !== socket.id && !u.bot);
+      if (!real.length) return cb({ error: 'Phòng chưa có ai khác để thách đấu' });
+      room.boxAll = { from: socket.id, name: me.name, timer: setTimeout(() => { if (room.boxAll && room.boxAll.from === socket.id) { room.boxAll = null; socket.emit('toast', 'Chưa ai nhận lời thách đấu'); io.to(room.id).emit('box:inviteGone'); } }, 20000) };
+      for (const [id] of real) io.to(id).emit('box:invite', { from: socket.id, name: me.name, ms: 20000, all: true });
+      sysMsg(room, `🥊 ${me.name} thách đấu cả phòng! Ai nhận trước sẽ lên sàn.`);
+      return cb({ ok: true, n: real.length });
     }
+    const tg = room.users.get(targetId);
+    if (!tg || targetId === socket.id) return cb({ error: 'Không tìm thấy người này' });
+    if (tg.bot) { setTimeout(() => socket.emit('toast', `${tg.name} đã từ chối lời thách đấu`), 2500 + Math.random() * 4000); return cb({ ok: true }); }
     const old = room.boxInv.get(targetId); if (old) clearTimeout(old.timer);
     const inv = { from: socket.id, name: me.name, at: now };
     inv.timer = setTimeout(() => { if (room.boxInv.get(targetId) === inv) { room.boxInv.delete(targetId); socket.emit('toast', `${tg.name} không trả lời lời thách đấu`); io.to(targetId).emit('box:inviteGone'); } }, 15000);
@@ -804,16 +815,19 @@ io.on('connection', (socket) => {
   });
   socket.on('box:answer', (d) => {
     const room = rooms.get(socket.data.room); if (!room || !d) return;
-    const inv = room.boxInv.get(socket.id); if (!inv || inv.from !== d.from) return;
+    const me = room.users.get(socket.id); if (!me) return;
+    if (room.boxAll && room.boxAll.from === d.from && d.from !== socket.id) {            // trả lời lời thách đấu cả phòng
+      if (!d.accept) return;
+      if (!room.users.get(d.from)) { room.boxAll = null; return socket.emit('toast', 'Người thách đấu đã rời phòng'); }
+      if (!boxStart(room, d.from, socket.id)) socket.emit('toast', 'Đã có người nhận trước rồi');
+      return;
+    }
+    const inv = room.boxInv.get(socket.id);
+    if (!inv || inv.from !== d.from) return socket.emit('toast', 'Lời thách đấu đã hết hạn hoặc có người nhận trước');
     clearTimeout(inv.timer); room.boxInv.delete(socket.id);
-    const me = room.users.get(socket.id), ch = room.users.get(inv.from);
-    if (!ch) return socket.emit('toast', 'Người thách đấu đã rời phòng');
+    if (!room.users.get(inv.from)) return socket.emit('toast', 'Người thách đấu đã rời phòng');
     if (!d.accept) return io.to(inv.from).emit('toast', `${me.name} đã từ chối lời thách đấu`);
-    const A = room.arena;
-    if (A.phase !== 'wait' || [A.slots.a, A.slots.b].some((x) => x && x.id !== inv.from && x.id !== socket.id)) { socket.emit('toast', 'Sân boxing đang có người khác'); return io.to(inv.from).emit('toast', 'Sân boxing đang có người khác'); }
-    A.slots = { a: { id: inv.from, name: ch.name }, b: { id: socket.id, name: me.name } };
-    io.to(inv.from).emit('ba:open'); socket.emit('ba:open');
-    arenaEmit(room); arenaTryStart(room);
+    if (!boxStart(room, inv.from, socket.id)) { socket.emit('toast', 'Sân boxing đang có trận khác'); io.to(inv.from).emit('toast', 'Sân boxing đang có trận khác'); }
   });
 
   // ----- Bàn DJ -----
