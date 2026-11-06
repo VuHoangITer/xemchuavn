@@ -64,6 +64,7 @@ module.exports = function setupAdmin(ctx) {
       users: all.length, online: online.size, banned: all.filter((u) => auth.banOf(u)).length,
       new24h: all.filter((u) => u.createdAt > now - 864e5).length, active24h: all.filter((u) => u.lastSeen > now - 864e5).length,
       rooms: rooms.size, ipBans: (S().ipBans || []).length, log: (S().log || []).slice(0, 30),
+      boxBot: !!S().boxBot,
       bots: { on: !!S().bots, n: rooms.get('main').botN || 0, real: rooms.get('main').users.size - (rooms.get('main').botN || 0), seats: rooms.get('main').nSeats },
     });
   });
@@ -161,6 +162,11 @@ module.exports = function setupAdmin(ctx) {
     res.json({ ok: true });
   });
 
+  router.post('/boxbot', (req, res) => {                     // bật / tắt bot boxing
+    const st = S(); st.boxBot = !!req.body.on;
+    log(req.admin, `${st.boxBot ? 'Bật' : 'Tắt'} bot boxing`);
+    res.json({ ok: true, on: st.boxBot });
+  });
   router.post('/bots', (req, res) => {                       // bật / tắt bot lấp đầy rạp công cộng
     const st = S(); st.bots = !!req.body.on;
     balanceBots(rooms.get('main'), true);

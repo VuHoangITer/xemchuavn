@@ -3184,8 +3184,8 @@ function frame() {
   // luồng sáng nghiêng về phía cuối rạp (x âm → hướng +z), quét nhẹ, không bao giờ hắt lên màn chiếu
   if (ar.scene && arLive()) arenaFrame(dt, t);                      // sân boxing: chạy khi có trận, chiếu kín màn chiếu
   arenaScreen();
-  glR.render(scene, camera);
-  cssR.render(cssScene, camera);
+  if (ar.scene && arInRing()) glR.render(ar.scene, ar.cam);           // võ sĩ: vào không gian riêng của sân đấu
+  else { glR.render(scene, camera); cssR.render(cssScene, camera); }
   tryBootPlayer();
   requestAnimationFrame(frame);
 }
@@ -5097,9 +5097,11 @@ const AR_R = 6.0, AR_TOP = 1.0, AR_ARM = 1.25;                     // nửa cạ
 const AR_CD = { white: 450, red: 1400 }, AR_CHG = { min: 1000, max: 1500 };
 const AR_STAM = { max: 100, cost: 65, regen: 14, delay: 900 };   // né 1 lần rồi chờ ~3s
 const AR_COL = { white: 0xffffff, blue: 0x3fa0ff, red: 0xff2a3d };
+const AR_JUMP_MS = 700;
 const ar = { hideScreen: false, prevCam: null, scene: null, cam: null, st: null, f: { a: null, b: null }, me: null, keys: {}, stick: { x: 0, z: 0 },
   kb: { x: 0, z: 0 }, dodgeV: null, sendT: 0, cd: { white: 0, red: 0 }, pops: [], crowd: null, cheer: 0, pipN: 0, inv: null, invT: 0,
   camT: new THREE.Vector3(), stam: AR_STAM.max, stamT: 0, chg: 0, glowTex: null };
+const arInRing = () => !!(ar.me && ar.st && ar.st.phase !== 'wait');      // mình đang ở sân đấu (không gian riêng)
 const arLive = () => !!(ar.st && (ar.st.phase === 'fight' || ar.st.phase === 'count' || ar.st.phase === 'end'));
 const arNow = () => performance.now();
 function arStam() { const since = arNow() - ar.stamT - AR_STAM.delay; return since > 0 ? Math.min(AR_STAM.max, ar.stam + since / 1000 * AR_STAM.regen) : ar.stam; }
@@ -5108,7 +5110,8 @@ function arStam() { const since = arNow() - ar.stamT - AR_STAM.delay; return sin
 function buildArena() {
   if (ar.scene) return;
   const S = ar.scene = new THREE.Scene(); S.background = new THREE.Color(0x07070c); S.fog = new THREE.Fog(0x07070c, 30, 70);
-  ar.cam = new THREE.PerspectiveCamera(45, 16 / 9, 0.1, 160); ar.cam.position.set(0, 9, 14); ar.cam.lookAt(0, 1.5, 0);
+  ar.cam = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 160); ar.cam.position.set(0, 9, 14); ar.cam.lookAt(0, 1.5, 0);   // màn hình của võ sĩ
+  ar.scam = new THREE.PerspectiveCamera(45, 16 / 9, 0.1, 160); ar.scam.position.copy(ar.cam.position); ar.scam.lookAt(0, 1.5, 0);   // chiếu lên màn rạp
   S.add(new THREE.HemisphereLight(0xc8ccff, 0x15121c, 0.8));
   const key = new THREE.SpotLight(0xfff2dd, 1600, 44, 0.62, 0.45, 1.3); key.position.set(0, 20, 4); key.target.position.set(0, 0, 0); S.add(key, key.target);
   for (const [x, c] of [[-13, 0xff3050], [13, 0x4070ff]]) { const l = new THREE.PointLight(c, 260, 36, 1.6); l.position.set(x, 7, -5); S.add(l); }
@@ -5174,7 +5177,7 @@ function arenaFighter(side) {
   if (!sl) { if (f) { ar.scene.remove(f.av.g, f.ring, f.glow); f.light.intensity = 0; ar.f[side] = null; } return null; }
   if (f && f.id === sl.id) return f;
   if (f) { ar.scene.remove(f.av.g, f.ring, f.glow); f.light.intensity = 0; }
-  const u = (cur && cur.users.find((x) => x.id === sl.id)) || { id: sl.id, name: sl.name, look: null };
+  const u = (cur && cur.users.find((x) => x.id === sl.id)) || { id: sl.id, name: sl.name, look: sl.look || null };
   const av = createAvatar({ ...u }, false); setSitting(av, false); av.seat = null;
   av.armL.scale.y = av.armR.scale.y = AR_ARM;                                   // tay dài hơn
   ar.scene.add(av.g);
@@ -5190,29 +5193,35 @@ function arenaFighter(side) {
 const L3 = THREE.MathUtils.lerp;
 function arenaPose(f, t) {
   const a = f.av, now = arNow(), an = f.anim, p = an ? (now - an.t0) / 1000 : 9;
-  let L = [0.95, 0, -0.3], Le = 2.1, R = [0.95, 0, 0.3], Re = 2.1, ux = -0.12, uz = 0, hx = 0.12, push = 0, fall = 0, jump = 0, dip = 0;
+  let L = [0.95, 0, -0.3], Le = 2.1, R = [0.95, 0, 0.3], Re = 2.1, ux = -0.12, uz = 0, hx = 0.12, push = 0, fall = 0, jump = 0, dip = 0, stretch = 1;
+  const air = f.jump && now - f.jump < AR_JUMP_MS ? Math.sin((now - f.jump) / AR_JUMP_MS * Math.PI) * 1.35 : 0;   // độ cao khi nhảy
   if (f.ko) { fall = Math.min(1, (an && an.k === 'ko' ? p : 1) / 0.6); ux = 0.2; L = [0.3, 0, -1.2]; R = [0.3, 0, 1.2]; Le = Re = 0.3; }
   else if (f.win) { const k = Math.abs(Math.sin(t * 6)); L = [0.1, 0, -2.75 + 0.25 * k]; R = [0.1, 0, 2.75 - 0.25 * k]; Le = Re = 0.3; jump = 0.22 * k; hx = -0.15; }
   else if (f.charging) {                                                           // gồng đòn xanh: kéo nắm tay ra sau, hạ trọng tâm, run dần
     const k = Math.min(1, (now - f.charging) / AR_CHG.max), sh = Math.sin(t * 40) * 0.03 * k;
     R = [0.35 - 0.2 * k, 0, 0.75 + 0.2 * k]; Re = 2.6; L = [1.1, 0, -0.25]; Le = 1.9; ux = 0.12 + 0.1 * k + sh; dip = 0.12 * k; uz = 0.08 * k;
   }
+  else if (an && an.k === 'slam' && p < 0.5) {                       // nhảy đấm từ trên xuống: giơ tay cao rồi nện xuống
+    if (p < 0.2) { const k = p / 0.2; R = [L3(0.95, 3.0, k), 0, L3(0.3, 0.1, k)]; Re = L3(2.1, 0.3, k); ux = -0.05; }
+    else { const k = Math.min(1, (p - 0.2) / 0.18); R = [L3(3.0, 1.0, k), 0, 0.1]; Re = 0.2; ux = -0.12 - 0.35 * k; }
+  }
   else if (an && an.k === 'white' && p < 0.32) { const k = Math.sin(Math.min(1, p / 0.32) * Math.PI); R = [L3(0.95, 1.6, k), 0, L3(0.3, 0.02, k)]; Re = L3(2.1, 0.05, k); ux = -0.12 - 0.18 * k; }
-  else if (an && an.k === 'blue' && p < 0.5) { const k = Math.sin(Math.min(1, p / 0.5) * Math.PI); R = [L3(0.4, 1.62, k), 0, L3(0.8, 0, k)]; Re = L3(2.6, 0, k); L = [0.6, 0, -0.6]; ux = -0.12 - 0.35 * k; push = -0.45 * k; }
+  else if (an && an.k === 'blue' && p < 0.55) { const k = Math.sin(Math.min(1, p / 0.55) * Math.PI); R = [L3(0.4, 1.62, k), 0, L3(0.8, 0, k)]; Re = L3(2.6, 0, k); L = [0.6, 0, -0.6]; ux = -0.12 - 0.45 * k; push = -0.6 * k; stretch = 1 + 0.75 * k; }   // tay vươn dài + lao người
   else if (an && an.k === 'red' && p < 0.6) { const k = Math.min(1, p / 0.08); L = [L3(0.95, 1.35, k), L3(0, 0.45, k), L3(-0.3, -0.7, k)]; Le = L3(2.1, 1.5, k); R = [L3(0.95, 1.35, k), L3(0, -0.45, k), L3(0.3, 0.7, k)]; Re = L3(2.1, 1.5, k); ux = 0.12 * k; hx = 0.25 * k; }
   else if (an && an.k === 'dodge' && p < 0.4) { const k = Math.sin(Math.min(1, p / 0.4) * Math.PI); uz = 0.5 * k * (f.side === 'a' ? 1 : -1); dip = 0.22 * k; }
   else if (an && an.k === 'down' && p < 0.95) { const k = Math.sin(Math.min(1, p / 0.95) * Math.PI); fall = 0.75 * k; ux = 0.3 * k; L = [0.4, 0, -1.1]; R = [0.4, 0, 1.1]; Le = Re = 0.5; }   // bị đánh ngã rồi bật dậy
   else if (an && an.k === 'stagger' && p < 1.2) { const k = 1 - p / 1.2; L = [0.25, 0, -1.4]; R = [0.25, 0, 1.4]; Le = Re = 0.4; ux = 0.35 * k; uz = Math.sin(p * 14) * 0.25 * k; hx = -0.3 * k; }   // bị phá thế: loạng choạng
   else if (an && an.k === 'hit' && p < 0.45) { const k = Math.exp(-p * 6); ux = 0.5 * k; hx = -0.45 * k; push = 0.35 * k; }
-  a.armL.rotation.set(L[0], L[1], L[2]); a.armR.rotation.set(R[0], R[1], R[2]);
+  a.armL.rotation.set(L[0], L[1], L[2]); a.armR.rotation.set(R[0], R[1], R[2]); a.armR.scale.y = AR_ARM * stretch;
   if (a.elbowL) { a.elbowL.rotation.set(Le, 0, 0); a.elbowR.rotation.set(Re, 0, 0); }
-  const sw = f.mv && !f.ko && !f.win ? Math.sin(t * 13) * 0.55 : 0;
+  const sw = f.mv && !f.ko && !f.win && !air ? Math.sin(t * 13) * 0.55 : 0;
   a.legL.rotation.set(0.15 + sw, 0, -0.08); a.legR.rotation.set(-0.15 - sw, 0, 0.08);
   a.upper.rotation.x = ux; a.upper.rotation.z = uz; a.body.rotation.y = 0; a.body.position.x = 0; a.body.position.z = push;
   a.head.rotation.set(hx, 0, 0); a.head.position.y = HEAD_Y;
   a.g.rotation.x = -1.45 * fall;
   const bounce = f.ko || fall ? 0 : Math.abs(Math.sin(t * 5.5 + (f.side === 'a' ? 0 : 1.3))) * (f.mv ? 0.03 : 0.06);
-  a.g.position.y = AR_TOP + bounce + jump - dip;
+  a.g.position.y = AR_TOP + bounce + jump - dip + air;
+  if (air) { a.legL.rotation.x = 0.7; a.legR.rotation.x = 0.4; }
   a.wasDancing = true;
   // hào quang: xanh khi gồng (sáng dần), đỏ khi thủ thế phản đòn, loé trắng / xanh khi ra đòn
   let col = null, op = 0;
@@ -5230,7 +5239,8 @@ function arenaAnim(side, k) {
   const f = ar.f[side]; if (!f) return; const now = arNow();
   if (k === 'charge') { f.charging = now; return; }
   if (k === 'cancel') { f.charging = 0; return; }
-  if (k === 'white' || k === 'blue') { f.charging = 0; f.flash = now + 300; f.flashCol = AR_COL[k]; }
+  if (k === 'jump') { f.jump = now; f.charging = 0; return; }
+  if (k === 'white' || k === 'blue' || k === 'slam') { f.charging = 0; f.flash = now + 300; f.flashCol = AR_COL[k === 'slam' ? 'white' : k]; }
   if (k === 'red') f.redUntil = now + 600;
   f.anim = { k, t0: now };
 }
@@ -5267,13 +5277,20 @@ function arenaControl(dt) {
   arenaMeters();
 }
 function arCanAct() { const f = ar.me && ar.f[ar.me]; return !!f && !f.ko && ar.st && ar.st.phase === 'fight' && !arStunned(); }
+const arAirborne = (f) => !!f && !!f.jump && arNow() - f.jump < AR_JUMP_MS;
 function arWhite() {
   const f = ar.f[ar.me]; if (!arCanAct() || f.charging) return;
   const now = arNow(); if (now < ar.cd.white) return; ar.cd.white = now + AR_CD.white;
-  socket.emit('ba:atk'); arenaAnim(ar.me, 'white'); sfx('whoosh', vol * 0.6);
+  const air = arAirborne(f);                                          // đang nhảy → đấm từ trên xuống
+  socket.emit('ba:atk', { air }); arenaAnim(ar.me, air ? 'slam' : 'white'); sfx('whoosh', vol * 0.6);
+}
+function arJump() {
+  const f = ar.f[ar.me]; if (!arCanAct() || arAirborne(f)) return;
+  f.jump = arNow(); f.charging = 0;                                   // nhảy ngắt gồng (giống né)
+  socket.emit('ba:jump'); sfx('whoosh', vol * 0.5);
 }
 function arChargeStart() {
-  const f = ar.f[ar.me]; if (!arCanAct() || f.charging) return;
+  const f = ar.f[ar.me]; if (!arCanAct() || f.charging || arAirborne(f)) return;   // đang nhảy thì không gồng được
   const now = arNow(); if (now < ar.cd.white) return;
   socket.emit('ba:charge'); arenaAnim(ar.me, 'charge');
 }
@@ -5336,8 +5353,8 @@ function arenaFrame(dt, t) {
     const mx = A && B ? (A.x + B.x) / 2 : A ? A.x : B ? B.x : 0, mz = A && B ? (A.z + B.z) / 2 : A ? A.z : B ? B.z : 0;
     const d = A && B ? Math.hypot(A.x - B.x, A.z - B.z) : 3, far = 1;
     ar.camT.set(mx * 0.65, (6 + d * 0.42) * far, (9 + d * 0.62) * far + mz * 0.55);
-    ar.cam.position.lerp(ar.camT, Math.min(1, dt * 3));
-    ar.cam.lookAt(mx * 0.65, AR_TOP + 1.0, mz * 0.6);
+    for (const c of [ar.cam, ar.scam]) { c.position.lerp(ar.camT, Math.min(1, dt * 3)); c.lookAt(mx * 0.65, AR_TOP + 1.0, mz * 0.6); }
+    const asp = innerWidth / innerHeight; if (Math.abs(ar.cam.aspect - asp) > 0.001) { ar.cam.aspect = asp; ar.cam.updateProjectionMatrix(); }
   }
 }
 
@@ -5363,10 +5380,10 @@ function drawArPipHud() {
   arPip.tex.needsUpdate = true;
 }
 function arenaScreen() {
-  const show = !!ar.scene && arLive() && (!ar.hideScreen || !!ar.me);
+  const show = !!ar.scene && arLive() && !ar.hideScreen && !arInRing();
   arPip.group.visible = show; if (!show) return;
   if ((ar.pipN = (ar.pipN + 1) % 2) !== 0) return;                      // ~30 hình / giây
-  glR.setRenderTarget(arPip.rt); glR.render(ar.scene, ar.cam); glR.setRenderTarget(null);
+  glR.setRenderTarget(arPip.rt); glR.render(ar.scene, ar.scam); glR.setRenderTarget(null);
 }
 
 // ---- sự kiện từ server
@@ -5375,9 +5392,6 @@ function arenaOnState(st) {
   const prev = ar.st; ar.st = st;
   ar.me = st.slots.a && st.slots.a.id === myId ? 'a' : st.slots.b && st.slots.b.id === myId ? 'b' : null;
   if (arLive()) buildArena();
-  const fighting = !!ar.me && (st.phase === 'count' || st.phase === 'fight');
-  if (fighting && ar.prevCam == null) { ar.prevCam = camMode; if (camMode !== 'screen') setCamMode('screen'); }
-  if (!ar.me && ar.prevCam != null && st.phase === 'wait') { const pc = ar.prevCam; ar.prevCam = null; if (pc !== 'screen') setCamMode(pc); }
   if (st.phase === 'count' && (!prev || prev.phase !== 'count')) ar.hideScreen = false;
   if (ar.scene) {
     for (const s of ['a', 'b']) { const f = arenaFighter(s); if (f && (st.phase === 'wait' || st.phase === 'count')) { f.ko = f.win = false; f.charging = 0; f.stunUntil = 0; if (st.phase === 'count') f.anim = null; } }
@@ -5391,6 +5405,10 @@ function arenaOnState(st) {
 function arenaOnAnim(d) {
   if (!d) return;
   if (d.s === ar.me && !d.rel && d.k !== 'blue' && d.k !== 'cancel') return;    // đòn của mình đã tự diễn trên máy mình
+  if (d.s === ar.me && d.k === 'blue') {                               // nhả xanh: lao người về phía đối thủ
+    const f = ar.f[ar.me], o = ar.f[ar.me === 'a' ? 'b' : 'a'];
+    if (f && o) { const dx = o.x - f.x, dz = o.z - f.z, l = Math.hypot(dx, dz) || 1; ar.dodgeV = { x: dx / l * 9, z: dz / l * 9, until: arNow() + 250 }; }
+  }
   arenaAnim(d.s, d.k);
   if (d.k === 'blue') sfx('whoosh', vol);
 }
@@ -5442,7 +5460,7 @@ function arenaUI() {
   const st = ar.st; if (!st) return;
   const live = arLive(), fighting = !!ar.me && (st.phase === 'count' || st.phase === 'fight');
   $('arenaUI').classList.toggle('hidden', !live);
-  document.body.classList.toggle('box-fight', fighting);
+  document.body.classList.toggle('box-fight', arInRing());
   if (!live) return;
   const nm = (s) => (st.slots[s] ? st.slots[s].name : '—');
   $('arNameA').textContent = nm('a'); $('arNameB').textContent = nm('b');
@@ -5464,14 +5482,14 @@ setInterval(() => {
 $('arScreenBtn').onclick = () => { ar.hideScreen = !ar.hideScreen; arenaUI(); };
 $('arQuit').onclick = () => { if (confirm('Bỏ cuộc? Bạn sẽ bị xử thua.')) socket.emit('ba:leave'); };
 // bàn phím: WASD đi · J trắng · giữ K tụ lực (xanh) · L đỏ · Space né
-const AR_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyJ', 'KeyK', 'KeyL', 'Space']);
+const AR_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyJ', 'KeyK', 'KeyL', 'Space', 'ShiftLeft', 'ShiftRight']);
 addEventListener('keydown', (e) => {
   if (!ar.me || !ar.st || (ar.st.phase !== 'fight' && ar.st.phase !== 'count')) return;   // chỉ khi mình đang thi đấu
   if (e.target && e.target.closest && e.target.closest('input,textarea,select,[contenteditable]')) return;
   if (!AR_KEYS.has(e.code)) return;
   e.preventDefault(); if (e.repeat) return;
   ar.keys[e.code] = true;
-  if (e.code === 'KeyJ') arWhite(); else if (e.code === 'KeyK') arChargeStart(); else if (e.code === 'KeyL') arRed(); else if (e.code === 'Space') arDodge();
+  if (e.code === 'KeyJ') arWhite(); else if (e.code === 'KeyK') arChargeStart(); else if (e.code === 'KeyL') arRed(); else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') arDodge(); else if (e.code === 'Space') arJump();
 });
 addEventListener('keyup', (e) => { if (ar.keys[e.code]) ar.keys[e.code] = false; if (e.code === 'KeyK') arChargeEnd(); });
 addEventListener('blur', () => { ar.keys = {}; arChargeEnd(); });
@@ -5489,7 +5507,7 @@ addEventListener('blur', () => { ar.keys = {}; arChargeEnd(); });
   stick.addEventListener('pointerup', end); stick.addEventListener('pointercancel', end);
   document.querySelectorAll('#arTouch [data-act]').forEach((b) => {
     const k = b.dataset.act;
-    b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.classList.add('on'); ({ white: arWhite, blue: arChargeStart, red: arRed, dodge: arDodge })[k](); });
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.classList.add('on'); ({ white: arWhite, blue: arChargeStart, red: arRed, dodge: arDodge, jump: arJump })[k](); });
     const up = () => { if (!b.classList.contains('on')) return; b.classList.remove('on'); if (k === 'blue') arChargeEnd(); };
     b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('pointerleave', up);
   });

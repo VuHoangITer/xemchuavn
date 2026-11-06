@@ -691,7 +691,8 @@
   #pvBox { margin-top: 4px; }
   /* ===== Sân boxing ===== */
   body:not(.in-room) #arenaUI, body:not(.in-room) #boxInvite { display: none !important; }
-  body.box-fight #reclineBox, body.box-fight #djPanel, body.box-fight #tapPlay { display: none !important; }   /* đang thi đấu: gọn màn hình */
+  body.box-fight #reclineBox, body.box-fight #djPanel, body.box-fight #tapPlay, body.box-fight #bl, body.box-fight #pill, body.box-fight #djBadge { display: none !important; }   /* võ sĩ đang ở sân riêng: gọn màn hình */
+  body.box-fight #arHud { top: 12px; } body.box-fight .arTools { top: 80px; }
   #arenaUI { position: fixed; inset: 0; z-index: 12; pointer-events: none; }
   #arenaUI > * { pointer-events: auto; }
   #arHud { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); width: min(620px, 70vw); padding: 10px 14px; border-radius: 16px; display: flex; align-items: center; gap: 12px; }
@@ -712,8 +713,9 @@
   #arTouch { position: fixed; inset: auto 0 0 0; height: 0; }
   #arStick { position: fixed; left: 22px; bottom: calc(var(--dockH, 120px) + 24px); width: 130px; height: 130px; border-radius: 50%; background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.2); touch-action: none; }
   #arStick i { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px; border-radius: 50%; background: rgba(255,255,255,.35); box-shadow: 0 0 16px rgba(255,255,255,.3); }
-  .arBtns { position: fixed; right: 16px; bottom: calc(var(--dockH, 120px) + 18px); display: grid; grid-template-columns: repeat(2, 72px); gap: 10px; }
-  .arBtns button { width: 72px; height: 72px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); background: rgba(20,14,22,.6); color: #fff; font-size: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .arBtns { position: fixed; right: 16px; bottom: calc(var(--dockH, 120px) + 18px); display: grid; grid-template-columns: repeat(3, 66px); gap: 9px; }
+  .arBtns button[data-act="jump"] { background: rgba(60,200,140,.45); }
+  .arBtns button { width: 66px; height: 66px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); background: rgba(20,14,22,.6); color: #fff; font-size: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; touch-action: none; user-select: none; -webkit-user-select: none; }
   .arBtns button span { font-size: 11px; font-weight: 700; } .arBtns button.on { background: rgba(255,60,80,.6); transform: scale(.94); }
   .arBtns button[data-act="white"] { background: rgba(240,240,250,.35); } .arBtns button[data-act="blue"] { background: rgba(40,130,255,.5); } .arBtns button[data-act="red"] { background: rgba(230,40,60,.55); }
   .cw { color: #fff; font-weight: 700; } .cb { color: #5ab4ff; font-weight: 700; } .cr { color: #ff5a6a; font-weight: 700; }
@@ -1063,14 +1065,14 @@
   </div>
   <div id="arBig"></div>
   <div class="arTools"><button id="arScreenBtn" class="glass" type="button">🎬 Xem phim (ẩn boxing)</button><button id="arQuit" class="glass hidden" type="button">🏳️ Bỏ cuộc</button></div>
-  <div id="arKeys" class="glass hidden"><b>WASD</b> đi · <b>J</b> <span class="cw">trắng</span> · giữ <b>K</b> <span class="cb">xanh</span> · <b>L</b> <span class="cr">đỏ</span> · <b>Space</b> né</div>
+  <div id="arKeys" class="glass hidden"><b>WASD</b> đi · <b>J</b> <span class="cw">trắng</span> · giữ <b>K</b> <span class="cb">xanh</span> · <b>L</b> <span class="cr">đỏ</span> · <b>Shift</b> né · <b>Space</b> nhảy (nhảy + <b>J</b> đấm từ trên xuống)</div>
   <div id="arMeters" class="hidden">
     <div id="arChg" class="hidden"><i id="arChgBar"></i><span>GỒNG</span></div>
     <div id="arStam"><i id="arStamBar"></i><span>THỂ LỰC</span></div>
   </div>
   <div id="arTouch" class="hidden">
     <div id="arStick"><i></i></div>
-    <div class="arBtns"><button data-act="white" type="button">👊<span>Trắng</span></button><button data-act="blue" type="button">💙<span>Tụ lực</span></button><button data-act="red" type="button">🟥<span>Phản</span></button><button data-act="dodge" type="button">💨<span>Né</span></button></div>
+    <div class="arBtns"><button data-act="white" type="button">👊<span>Trắng</span></button><button data-act="blue" type="button">💙<span>Tụ lực</span></button><button data-act="red" type="button">🟥<span>Phản</span></button><button data-act="dodge" type="button">💨<span>Né</span></button><button data-act="jump" type="button">⤴️<span>Nhảy</span></button></div>
   </div>
 </div>
 <div id="boxInvite" class="glass hidden">

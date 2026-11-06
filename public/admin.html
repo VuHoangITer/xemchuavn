@@ -84,6 +84,11 @@
       <div class="small muted" style="margin-top:6px">Bật: rạp công cộng luôn kín ghế bằng khán giả ảo (tên, ngoại hình ngẫu nhiên). Mỗi người thật vào thì 1 bot đứng dậy nhường chỗ; người thật ra thì bot vào lại. Bot không chat, không tính vào vote bỏ qua / đèn bar.</div>
     </div>
     <div class="card">
+      <h2>🥊 Bot boxing</h2>
+      <div class="row"><button class="b" id="boxBotBtn">…</button></div>
+      <div class="small muted" style="margin-top:6px">Bật: ai thách đấu boxing mà 5 giây chưa có người nhận thì được đánh với bot. Bot đánh theo luật tam khắc (thấy đỏ thì đánh trắng, thấy gồng xanh thì canh phản đỏ / né, đối thủ choáng thì gồng xanh trừng phạt...) với phản xạ như người.</div>
+    </div>
+    <div class="card">
       <h2>📢 Thông báo toàn server</h2>
       <div class="row"><input id="annText" maxlength="200" placeholder="VD: 21h tối nay chiếu phim mới, mọi người vào rạp nhé!" style="flex:1;min-width:220px"><button class="b p" id="annSend">Gửi</button></div>
       <div class="small muted" style="margin-top:6px">Hiện thành dòng thông báo cho mọi người đang online + ghi vào khung chat các phòng.</div>
@@ -170,6 +175,9 @@ async function loadOverview() {
   const o = await api('/overview');
   const st = [['Tài khoản', o.users], ['Đang online', o.online], ['Hoạt động 24h', o.active24h], ['Mới tạo 24h', o.new24h], ['Đang bị khoá', o.banned], ['Phòng đang mở', o.rooms], ['IP bị chặn', o.ipBans]];
   $('stats').innerHTML = st.map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('');
+  $('boxBotBtn').textContent = o.boxBot ? '🥊 Bot boxing đang BẬT — bấm để tắt' : 'Bot boxing đang TẮT — bấm để bật';
+  $('boxBotBtn').className = 'b ' + (o.boxBot ? 'g' : 'p');
+  $('boxBotBtn').onclick = async () => { if (await act('/boxbot', { on: !o.boxBot }, o.boxBot ? 'Đã tắt bot boxing' : 'Đã bật bot boxing')) loadOverview(); };
   const B = o.bots;
   $('botBtn').textContent = B.on ? '🤖 Đang BẬT — bấm để tắt' : 'Đang TẮT — bấm để bật';
   $('botBtn').className = 'b ' + (B.on ? 'g' : 'p');
