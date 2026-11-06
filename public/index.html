@@ -710,6 +710,7 @@
   .arSlot { padding: 12px 8px; border-radius: 14px; font: inherit; font-weight: 800; font-size: 15px; color: #fff; cursor: pointer; border: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .arSlot.a { background: linear-gradient(135deg, #c62a3a, #ff5a5a); } .arSlot.b { background: linear-gradient(135deg, #2a4fc6, #5a8aff); } .arSlot:disabled { opacity: .55; cursor: default; }
   .arRow { display: flex; gap: 8px; justify-content: center; margin-top: 8px; } .arRow button { padding: 8px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.07); color: inherit; font: inherit; cursor: pointer; }
+  #arLobby.compact { padding: 6px; width: min(420px, 90vw); } #arLobby.compact .arHelp, #arLobby.compact .arRow { display: none; } #arLobby.compact .arSlot { padding: 6px; font-size: 13px; }
   .arHelp { margin-top: 8px; font-size: 12px; color: var(--muted); line-height: 1.5; }
   #arKeys { position: fixed; left: 50%; bottom: 86px; transform: translateX(-50%); padding: 6px 14px; border-radius: 999px; font-size: 12.5px; white-space: nowrap; }
   #arTouch { position: fixed; inset: auto 0 0 0; height: 0; }
@@ -718,7 +719,15 @@
   .arBtns { position: fixed; right: 16px; bottom: calc(var(--dockH, 120px) + 18px); display: grid; grid-template-columns: repeat(2, 72px); gap: 10px; }
   .arBtns button { width: 72px; height: 72px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); background: rgba(20,14,22,.6); color: #fff; font-size: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; touch-action: none; user-select: none; -webkit-user-select: none; }
   .arBtns button span { font-size: 11px; font-weight: 700; } .arBtns button.on { background: rgba(255,60,80,.6); transform: scale(.94); }
-  .arBtns button[data-act="jab"] { background: rgba(200,40,60,.55); } .arBtns button[data-act="block"] { background: rgba(40,80,200,.5); }
+  .arBtns button[data-act="white"] { background: rgba(240,240,250,.35); } .arBtns button[data-act="blue"] { background: rgba(40,130,255,.5); } .arBtns button[data-act="red"] { background: rgba(230,40,60,.55); }
+  .cw { color: #fff; font-weight: 700; } .cb { color: #5ab4ff; font-weight: 700; } .cr { color: #ff5a6a; font-weight: 700; }
+  #arMeters { position: fixed; left: 50%; bottom: 128px; transform: translateX(-50%); width: min(300px, 70vw); display: flex; flex-direction: column; gap: 6px; pointer-events: none !important; }
+  #arMeters > div { position: relative; height: 14px; border-radius: 8px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.18); overflow: hidden; }
+  #arMeters i { display: block; height: 100%; width: 100%; transition: width .08s linear; }
+  #arMeters span { position: absolute; inset: 0; text-align: center; font-size: 10px; font-weight: 800; line-height: 13px; letter-spacing: 1px; text-shadow: 0 1px 2px #000; }
+  #arStam i { background: linear-gradient(90deg, #3ad29f, #9dffcf); } #arStam.low i { background: linear-gradient(90deg, #ff9f43, #ffb020); }
+  #arChg i { background: linear-gradient(90deg, #ddd, #fff); } #arChg.blue i { background: linear-gradient(90deg, #2a7fff, #7fd0ff); box-shadow: 0 0 12px #3fa0ff; }
+  @media (max-width: 760px) { #arMeters { bottom: calc(var(--dockH, 120px) + 190px); } }
   @media (max-width: 760px) { body.arena-on #br { display: none !important; } #arHud { top: 56px; width: 94vw; } .arBack { top: 8px; left: 8px; padding: 6px 10px; } #arLobby { bottom: calc(var(--dockH, 120px) + 8px); } }
   #boxInvite { position: fixed; top: 84px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 12px 16px; border-radius: 16px; text-align: center; width: min(420px, 94vw); }
   .bxInvBtns { display: flex; gap: 8px; justify-content: center; margin-top: 10px; } .bxInvBtns button { padding: 8px 18px; border-radius: 10px; }
@@ -1061,12 +1070,17 @@
   <div id="arLobby" class="glass">
     <div class="arSlots"><button id="arJoinA" class="arSlot a" type="button">🔴 Vào góc đỏ</button><button id="arJoinB" class="arSlot b" type="button">🔵 Vào góc xanh</button></div>
     <div class="arRow"><button id="arChal" type="button">🥊 Thách đấu người trong phòng</button><button id="arLeave" class="hidden" type="button">Rời sàn</button></div>
-    <div class="arHelp">Vào 1 góc — đủ 2 người là đánh. <b>WASD</b> di chuyển · <b>J</b> đấm thẳng · <b>K</b> móc · giữ <b>L</b>/<b>Shift</b> đỡ · <b>Space</b> lướt né. Điện thoại có nút trên màn hình.</div>
+    <div class="arHelp">Vào 1 góc — đủ 2 người là đánh. <b>WASD</b> di chuyển · <b>J</b> <span class="cw">đấm thẳng (trắng)</span> · giữ <b>K</b> <span class="cb">tụ lực (xanh)</span> · <b>L</b> <span class="cr">phản đòn (đỏ)</span> · <b>Space</b> né (tốn thể lực)<br>
+      <span class="cw">Trắng</span> thắng <span class="cr">Đỏ</span> · <span class="cr">Đỏ</span> thắng <span class="cb">Xanh</span> · <span class="cb">Xanh</span> thắng <span class="cw">Trắng</span> · gồng xanh 1–1,5s (nhả trước 1s thành trắng, đủ 1,5s tự nhả)</div>
   </div>
-  <div id="arKeys" class="glass hidden"><b>WASD</b> đi · <b>J</b> đấm · <b>K</b> móc · <b>L</b>/<b>Shift</b> đỡ · <b>Space</b> né</div>
+  <div id="arKeys" class="glass hidden"><b>WASD</b> đi · <b>J</b> <span class="cw">trắng</span> · giữ <b>K</b> <span class="cb">xanh</span> · <b>L</b> <span class="cr">đỏ</span> · <b>Space</b> né</div>
+  <div id="arMeters" class="hidden">
+    <div id="arChg" class="hidden"><i id="arChgBar"></i><span>GỒNG</span></div>
+    <div id="arStam"><i id="arStamBar"></i><span>THỂ LỰC</span></div>
+  </div>
   <div id="arTouch" class="hidden">
     <div id="arStick"><i></i></div>
-    <div class="arBtns"><button data-act="jab" type="button">👊<span>Đấm</span></button><button data-act="hook" type="button">💥<span>Móc</span></button><button data-act="block" type="button">🛡️<span>Đỡ</span></button><button data-act="dodge" type="button">💨<span>Né</span></button></div>
+    <div class="arBtns"><button data-act="white" type="button">👊<span>Trắng</span></button><button data-act="blue" type="button">💙<span>Tụ lực</span></button><button data-act="red" type="button">🟥<span>Phản</span></button><button data-act="dodge" type="button">💨<span>Né</span></button></div>
   </div>
 </div>
 <div id="boxInvite" class="glass hidden">
