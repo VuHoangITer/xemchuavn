@@ -392,9 +392,9 @@ function makeSeatForReal(room) {
 const AR = {
   R: 6.0,                                                            // nửa cạnh sàn đấu (m)
   white: { dmg: 8, range: 2.35, wind: 130, cd: 450, kb: 0.55 },
-  blue: { min: 1000, max: 1500, dmgLo: 16, dmgHi: 24, range: 3.9, wind: 180, cd: 700, kb: 1.6, stun: 900 },   // nhả xanh: lao người tới → với xa hơn nhiều
+  blue: { min: 1000, lv2: 2000, max: 2500, dmg1: 18, dmg2: 28, stun1: 900, stun2: 1300, kb1: 1.5, kb2: 2.3, range: 3.9, range2: 4.4, wind: 200, cd: 700 },   // gồng 1s = cấp 1 (ting), 2s = cấp 2 (ting), 2.5s tự nhả; nhả = lao người tới
   air: { dmg: 11, range: 2.45, wind: 230, stun: 260, kb: 0.8 },     // nhảy đấm từ trên xuống (vẫn tính là đòn trắng)
-  red: { win: 600, cd: 1400, stun: 1300, dmg: 6 },
+  red: { win: 350, cd: 1000, stun: 1400, dmg: 8 },                  // đỏ chỉ nháy 0.35s: phải đúng nhịp (theo tiếng ting) mới phản được
   DODGE_MS: 380, DODGE_COST: 65, STAM_MAX: 100, STAM_REGEN: 14, STAM_DELAY: 900,   // né 1 lần rồi chờ ~3s mới né tiếp được
   LAG_MS: 250,                                                       // bù độ trễ mạng khi xét trúng đòn
   TIME: 90000, COUNT: 3500,
@@ -404,7 +404,7 @@ function per(v) { return { a: v, b: v }; }       // khai báo hàm (dùng đư�
 function newArena() {
   return { slots: { a: null, b: null }, phase: 'wait', hp: per(100), pos: { a: { x: -3, z: 0 }, b: { x: 3, z: 0 } },
     charge: per(0), red: per(0), dodge: per(0), stun: per(0), cd: per(0), rcd: per(0), stam: per(100), stamT: per(0), ctimer: per(null), hist: { a: [], b: [] },
-    lastAtk: per(0), bot: null, botTimer: null,
+    lastAtk: per(0), lastRel: per(null), bot: null, botTimer: null,
     at: 0, timer: null, winner: null, reason: '' };
 }
 function arenaState(room) {
@@ -492,12 +492,12 @@ function arenaWhite(room, s, air) {
   io.to(room.id).emit('ba:hit', { s: d, by: s, k: air ? 'air' : 'white', kind, dmg, stun, hp: A.hp, kb, fx: P.x, fz: P.z });
   if (ko) arenaEnd(room, s, 'KO');
 }
-// đòn XANH (power 0..1 theo thời gian gồng 1s → 1.5s)
-function arenaBlue(room, s, power) {
+// đòn XANH cấp 1 / cấp 2
+function arenaBlue(room, s, lv) {
   const A = room.arena; if (A.phase !== 'fight') return;
   const d = other(s), now = Date.now(), M = AR.blue, P = A.pos[s], Q = A.pos[d];
   if (A.stun[s] > now) return;
-  if (arenaDist(A, s, d, now) > M.range) return io.to(room.id).emit('ba:miss', { s, k: 'blue' });
+  if (arenaDist(A, s, d, now) > (lv === 2 ? M.range2 : M.range)) return io.to(room.id).emit('ba:miss', { s, k: 'blue' });
   if (A.dodge[d] > now) return io.to(room.id).emit('ba:miss', { s, k: 'blue', dodged: true });
   if (A.red[d] > now) {                                              // đỏ khắc xanh: phản đòn
     A.red[d] = 0; arenaStun(room, s, AR.red.stun);
@@ -507,28 +507,29 @@ function arenaBlue(room, s, power) {
     if (ko) arenaEnd(room, d, 'KO');
     return;
   }
-  const dmg = Math.round(M.dmgLo + (M.dmgHi - M.dmgLo) * power);
-  arenaStun(room, d, M.stun);
+  const dmg = lv === 2 ? M.dmg2 : M.dmg1, stun = lv === 2 ? M.stun2 : M.stun1, kb = lv === 2 ? M.kb2 : M.kb1;
+  arenaStun(room, d, stun);
   const ko = arenaDamage(room, d, dmg);
-  botKnock(A, d, P.x, P.z, M.kb * (0.8 + 0.4 * power));
-  io.to(room.id).emit('ba:hit', { s: d, by: s, k: 'blue', kind: 'normal', dmg, stun: M.stun, hp: A.hp, kb: M.kb * (0.8 + 0.4 * power), fx: P.x, fz: P.z });
+  botKnock(A, d, P.x, P.z, kb);
+  io.to(room.id).emit('ba:hit', { s: d, by: s, k: 'blue', lv, kind: 'normal', dmg, stun, hp: A.hp, kb, fx: P.x, fz: P.z });
   if (ko) arenaEnd(room, s, 'KO');
 }
-// nhả đòn gồng (chủ động nhả hoặc tự nhả ở 1.5s)
+// nhả đòn gồng (chủ động nhả hoặc tự nhả ở 2.5s)
 function arenaRelease(room, s, auto) {
   const A = room.arena, t0 = A.charge[s]; if (!t0) return;
   clearTimeout(A.ctimer[s]); A.ctimer[s] = null; A.charge[s] = 0;
   if (A.phase !== 'fight' || A.stun[s] > Date.now()) return io.to(room.id).emit('ba:anim', { s, k: 'cancel' });
   const held = Math.min(AR.blue.max, Date.now() - t0);
+  A.lastRel[s] = { t: Date.now(), held };                            // bot dùng để biết đối thủ vừa nhả ở nhịp nào
   if (held < AR.blue.min) {                                          // nhả sớm → thành đòn trắng
     io.to(room.id).emit('ba:anim', { s, k: 'white', rel: true });
     setTimeout(() => arenaWhite(room, s), AR.white.wind);
     return;
   }
-  const power = (held - AR.blue.min) / (AR.blue.max - AR.blue.min);
-  io.to(room.id).emit('ba:anim', { s, k: 'blue', auto: !!auto });
-  if (A.bot && A.bot.side === s) { const P = A.pos[s], Q = A.pos[other(s)], l = Math.hypot(Q.x - P.x, Q.z - P.z) || 1; A.bot.dash = { x: (Q.x - P.x) / l * 9, z: (Q.z - P.z) / l * 9, until: Date.now() + 250 }; }
-  setTimeout(() => arenaBlue(room, s, power), AR.blue.wind);
+  const lv = held >= AR.blue.lv2 ? 2 : 1;
+  io.to(room.id).emit('ba:anim', { s, k: 'blue', lv, auto: !!auto });
+  if (A.bot && A.bot.side === s) { const P = A.pos[s], Q = A.pos[other(s)], l = Math.hypot(Q.x - P.x, Q.z - P.z) || 1, v = lv === 2 ? 11 : 9; A.bot.dash = { x: (Q.x - P.x) / l * v, z: (Q.z - P.z) / l * v, until: Date.now() + (lv === 2 ? 290 : 250) }; }
+  setTimeout(() => arenaBlue(room, s, lv), AR.blue.wind);
 }
 
 // ---------- Bàn DJ ----------// ---------- Bàn DJ ----------// ---------- Bot boxing (bật trong trang quản trị): thách đấu 5s chưa ai nhận → đánh với bot ----------
@@ -572,22 +573,40 @@ function botTick(room) {
   const stunned = A.stun[s] > now, R = B.react + (Math.random() * 60 - 30), chance = (p) => Math.random() < p * dt * 20 / 20;
   let mx = 0, mz = 0;
   if (!stunned && now >= B.think) {
-    B.think = now + 90 + Math.random() * 60;                           // "suy nghĩ" ~10 lần / giây
+    B.think = A.charge[d] || A.charge[s] ? now : now + 90 + Math.random() * 60;   // "suy nghĩ" ~10 lần/giây; lúc có người gồng thì xét từng nhịp 50ms (canh ting phải chính xác)
     const redStart = A.red[d] - AR.red.win, oppCharge = A.charge[d], oppStun = A.stun[d] - now, held = A.charge[s] ? now - A.charge[s] : 0;
-    if (A.charge[s]) {                                                 // bot đang gồng
-      if (A.red[d] > now && now - redStart > R && held < AR.blue.min) botAct(room, 'release');   // đối thủ bật đỏ → nhả sớm thành trắng (trắng thắng đỏ)
-      else if (held >= AR.blue.min + 40 && (dist < AR.blue.range - 0.8 || oppStun > 150) && A.red[d] <= now) botAct(room, 'release');
+    const LR = A.lastRel[d];
+    if (LR && LR.t !== B.relSeen && now - LR.t < 140) {                // đối thủ vừa nhả: nếu bot đã đoán đúng nhịp này thì bật đỏ kịp trước khi đòn tới
+      B.relSeen = LR.t;
+      if ((B.plan === 'red1' || B.plan === 'red2') && Math.abs(LR.held - B.redAt) < 220 && LR.held >= AR.blue.min && dist < AR.blue.range2 + 0.6) botAct(room, 'red');
+    }
+    if (A.charge[s]) {                                                 // bot đang gồng: nhả ở ting 1 / ting 2, hoặc chờ đối thủ bật đỏ hụt rồi mới nhả
+      if (B.myCharge !== A.charge[s]) { B.myCharge = A.charge[s]; B.sawRed = false; B.relAt = B.punish ? AR.blue.min + 20 : Math.random() < 0.58 ? AR.blue.min + Math.random() * 160 : AR.blue.lv2 + Math.random() * 160; B.punish = false; }
+      if (A.red[d] > now) {
+        B.sawRed = true;
+        if (now - redStart > R && held < AR.blue.min) botAct(room, 'release');   // đỏ bật quá sớm → nhả luôn thành trắng (trắng thắng đỏ)
+      }                                                                  // đỏ đang bật mà đã qua ting → giữ, không nhả vào đỏ
+      else if (B.sawRed && held >= AR.blue.min && dist < AR.blue.range - 0.4) botAct(room, 'release');   // đối thủ vừa đỏ hụt → nhả ngay
+      else if (held >= B.relAt && (dist < AR.blue.range - 0.6 || oppStun > 150)) botAct(room, 'release');
     } else if (A.red[d] > now && now - redStart > R) {                   // đối thủ thủ thế đỏ → đánh trắng phá thế
       if (dist < AR.white.range + 0.2) botAct(room, 'white'); else { mx += ux; mz += uz; }
     } else if (oppCharge) {                                            // đối thủ gồng xanh → đoán lúc nhả để phản đỏ
-      if (B.chargeSeen !== oppCharge) { B.chargeSeen = oppCharge; B.plan = Math.random() < 0.72 ? 'red' : Math.random() < 0.5 ? 'dodge' : 'away'; B.redAt = 1000 + Math.random() * 120; }
+      // đoán theo tiếng ting: đỏ ngay sau ting 1 hoặc ting 2 (cửa sổ đỏ chỉ 0.35s → phải đúng nhịp); có lúc né / lùi
+      if (B.chargeSeen !== oppCharge) {
+        B.chargeSeen = oppCharge; const r = Math.random();
+        B.plan = r < 0.45 ? 'red1' : r < 0.72 ? 'red2' : r < 0.87 ? 'dodge' : 'away';
+        B.redAt = (B.plan === 'red2' ? AR.blue.lv2 : AR.blue.min) + 20 + Math.random() * 80;   // nhả đúng ting → đòn tới sau ~0.2s
+        B.dodgeAt = (Math.random() < 0.5 ? AR.blue.min : AR.blue.lv2) + 120;
+      }
       const age = now - oppCharge;
-      if (A.red[s] > now || A.dodge[s] > now) { /* đang phản / đang né: đứng yên chờ */ }
-      else if (B.plan === 'red' && age >= B.redAt && dist < AR.blue.range + 0.8) botAct(room, 'red');   // đỏ 0.6s phủ cú nhả từ 1s đến 1.5s (+ lúc vung)
-      else if (B.plan === 'dodge' && age >= 1150 && dist < AR.blue.range + 0.5) botAct(room, 'dodge');
+      if (A.red[s] > now || A.dodge[s] > now) { /* đang phản / đang né */ }
+      else if ((B.plan === 'red1' || B.plan === 'red2') && age >= B.redAt && dist < AR.blue.range2 + 0.6) {
+        if (botAct(room, 'red') && B.plan === 'red1' && Math.random() < 0.5) { B.plan = 'red2'; B.redAt = AR.blue.lv2 + 20 + Math.random() * 80; }   // bị lừa ting 1 → canh tiếp ting 2
+      }
+      else if (B.plan === 'dodge' && age >= B.dodgeAt && dist < AR.blue.range2 + 0.4) botAct(room, 'dodge');
       else if (B.plan === 'away') { mx -= ux; mz -= uz; }                // lùi ra khỏi tầm
-    } else if (oppStun > 1080 && dist < AR.blue.range) {               // đối thủ bị choáng lâu → gồng xanh trừng phạt
-      botAct(room, 'charge');
+    } else if (oppStun > 1150 && dist < AR.blue.range) {               // đối thủ bị choáng lâu → gồng xanh trừng phạt (nhả ở ting 1)
+      B.punish = true; botAct(room, 'charge');
     } else if (oppStun > 120 && dist < AR.white.range) {
       botAct(room, 'white');
     } else if (now - A.lastAtk[d] < 120 && dist < AR.white.range + 0.3 && Math.random() < 0.22) {   // thỉnh thoảng né kịp cú đấm
@@ -599,13 +618,13 @@ function botTick(room) {
   }
   // di chuyển: giữ khoảng cách ưa thích, đi vòng sang bên, lùi khi bị choáng
   if (now > B.strafeT) { B.strafeT = now + 900 + Math.random() * 1400; if (Math.random() < 0.5) B.strafe *= -1; B.prefer = 1.6 + Math.random() * 0.9; }
-  const want = A.charge[s] ? 2.6 : A.charge[d] ? (B.plan === 'red' ? 2.4 : 4.4) : B.prefer;   // đối thủ gồng: định phản thì đứng trong tầm, không thì lùi xa
+  const want = A.charge[s] ? 2.6 : A.charge[d] ? (B.plan === 'red1' || B.plan === 'red2' ? 2.4 : 4.9) : B.prefer;   // đối thủ gồng: định phản thì đứng trong tầm, không thì lùi xa
   const gap = dist - want;
   mx += ux * Math.max(-1, Math.min(1, gap * 1.4)); mz += uz * Math.max(-1, Math.min(1, gap * 1.4));
   mx += -uz * B.strafe * 0.55; mz += ux * B.strafe * 0.55;
   if (Math.abs(P.x) > AR.R - 1.2 || Math.abs(P.z) > AR.R - 1.2) { mx -= P.x * 0.25; mz -= P.z * 0.25; }   // tránh dồn vào góc
   const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
-  const sp = stunned ? 1.2 : A.charge[s] ? 2.0 : A.red[s] > now ? 1.5 : 4.3;
+  const sp = stunned ? 0 : A.charge[s] ? 2.0 : A.red[s] > now ? 1.5 : 4.3;     // bị choáng / bị phản: đứng im
   let vx = mx * sp, vz = mz * sp;
   if (B.dash && now < B.dash.until) { vx += B.dash.x; vz += B.dash.z; }
   vx += B.kx; vz += B.kz; const dec = Math.pow(0.015, dt); B.kx *= dec; B.kz *= dec;
@@ -856,7 +875,7 @@ io.on('connection', (socket) => {
     if (!s || A.phase !== 'fight' || now < A.cd[s] || A.stun[s] > now || A.charge[s]) return;
     A.charge[s] = now; A.cd[s] = now + AR.blue.max + AR.blue.cd; A.lastAtk[s] = now;
     socket.to(room.id).emit('ba:anim', { s, k: 'charge' });
-    A.ctimer[s] = setTimeout(() => arenaRelease(room, s, true), AR.blue.max);   // gồng đủ 1.5s → tự nhả
+    A.ctimer[s] = setTimeout(() => arenaRelease(room, s, true), AR.blue.max);   // gồng đủ 2.5s → tự nhả
   });
   socket.on('ba:release', () => {
     const room = rooms.get(socket.data.room); if (!room) return;

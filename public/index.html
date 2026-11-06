@@ -724,7 +724,8 @@
   #arMeters i { display: block; height: 100%; width: 100%; transition: width .08s linear; }
   #arMeters span { position: absolute; inset: 0; text-align: center; font-size: 10px; font-weight: 800; line-height: 13px; letter-spacing: 1px; text-shadow: 0 1px 2px #000; }
   #arStam i { background: linear-gradient(90deg, #3ad29f, #9dffcf); } #arStam.low i { background: linear-gradient(90deg, #ff9f43, #ffb020); }
-  #arChg i { background: linear-gradient(90deg, #ddd, #fff); } #arChg.blue i { background: linear-gradient(90deg, #2a7fff, #7fd0ff); box-shadow: 0 0 12px #3fa0ff; }
+  #arChg i { background: linear-gradient(90deg, #ddd, #fff); } #arChg.blue i { background: linear-gradient(90deg, #2a7fff, #7fd0ff); box-shadow: 0 0 12px #3fa0ff; } #arChg.lv2 i { background: linear-gradient(90deg, #1f5fff, #a8e4ff); box-shadow: 0 0 20px #7fd0ff; }
+  #arChg b { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,.75); } #arChg .m1 { left: 40%; } #arChg .m2 { left: 80%; }
   @media (max-width: 760px) { #arMeters { bottom: calc(var(--dockH, 120px) + 190px); } }
   .arTools { position: fixed; top: 132px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; } .arTools button { padding: 5px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.15); color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
   @media (max-width: 760px) { body.box-fight #br, body.box-fight #bl { display: none !important; } #arHud { top: 56px; width: 94vw; } .arTools { top: 118px; } }
@@ -1065,9 +1066,9 @@
   </div>
   <div id="arBig"></div>
   <div class="arTools"><button id="arScreenBtn" class="glass" type="button">🎬 Xem phim (ẩn boxing)</button><button id="arQuit" class="glass hidden" type="button">🏳️ Bỏ cuộc</button></div>
-  <div id="arKeys" class="glass hidden"><b>WASD</b> đi · <b>J</b> <span class="cw">trắng</span> · giữ <b>K</b> <span class="cb">xanh</span> · <b>L</b> <span class="cr">đỏ</span> · <b>Shift</b> né · <b>Space</b> nhảy (nhảy + <b>J</b> đấm từ trên xuống)</div>
+  <div id="arKeys" class="glass hidden"><b>WASD</b> đi · <b>J</b> <span class="cw">trắng</span> · giữ <b>K</b> <span class="cb">xanh</span> · <b>L</b> <span class="cr">đỏ</span> · <b>Shift</b> né · <b>Space</b> nhảy (nhảy + <b>J</b> đấm từ trên xuống) · nghe <b>ting</b> để canh đỏ</div>
   <div id="arMeters" class="hidden">
-    <div id="arChg" class="hidden"><i id="arChgBar"></i><span>GỒNG</span></div>
+    <div id="arChg" class="hidden"><i id="arChgBar"></i><b class="m1"></b><b class="m2"></b><span id="arChgTxt">GỒNG</span></div>
     <div id="arStam"><i id="arStamBar"></i><span>THỂ LỰC</span></div>
   </div>
   <div id="arTouch" class="hidden">
